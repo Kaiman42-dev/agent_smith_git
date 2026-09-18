@@ -1,0 +1,28 @@
+[project]
+name = "moulinette"
+version = "0.1.0"
+description = "Moulinette for MBPP and SWE-bench evaluation"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "docker>=7.0.0",
+    "fire>=0.7.1",
+    "mcp[cli]>=1.22.0",
+    "pytest>=8.0.0",
+    "swebench>=4.1.0",
+    "pydantic>=2.0.0",
+    "colorama>=0.4.6",
+    "chardet<6",
+]
+
+[project.scripts]
+moulinette_swebench = "moulinette.swebench.interact:_fire_main"
+moulinette_mbpp = "moulinette.mbpp.interact:_fire_main"
+moulinette_eval = "moulinette.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["moulinette"]
