@@ -2,7 +2,7 @@ from pathlib import Path
 import os
 
 
--run_tests()
+"""-run_tests()
 Execute the evaluation script.
 
 -get_patch()
@@ -11,4 +11,4 @@ the implementation.
 
 -run_command(command, workdir)
 Execute a shell command in the specified working directory.
-Returns the command’s stdout, stderr, and exit code.
+Returns the command’s stdout, stderr, and exit code."""
