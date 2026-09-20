@@ -73,7 +73,7 @@ def run_command(command, workdir=None):
         
     except subprocess.TimeoutExpired:
         return {
-            "error": "Timeout,
+            "error": "Timeout",
             "exit_code": -1
         }
         

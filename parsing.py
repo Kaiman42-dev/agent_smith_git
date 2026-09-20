@@ -47,27 +47,14 @@ def p_ReAct(s):
 	di = n.split("Action Input:")[1].strip()
 	dic = json.loads(di)
 	return f"""result = {name}(filepath="{dic['filepath']}", start_line={dic['start_line']}, end_line={dic['end_line']})\n"""
-"""
+
+
 if __name__ == "__main__":
 	aa = """Thought: I need to check the configuration file to understand the environment.
 	Action: read_file
 	Action Input: {"filepath": "/testbed/config.json", "start_line": 1, "end_line": 100}"""
 	resultat = p_ReAct(aa)
 	print(resultat)
-"""
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

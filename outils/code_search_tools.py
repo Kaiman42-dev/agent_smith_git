@@ -87,5 +87,7 @@ def find_references(name, filepath, line):
         return "Error"
 
 
+"""
 if __name__ == "__main__":
 	print(search_function_or_class_definition_in_code("calculate_total"))sony zv-e10
+"""
