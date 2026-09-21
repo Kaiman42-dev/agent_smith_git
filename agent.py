@@ -1,5 +1,10 @@
 import json
+import urllib.request
 
+OLLAMA_URL = "http://localhost:11434/api/chat"
+MODELE = "llama2"
+SYSTEM = "Tu es un agent intelligent capable d'utiliser des outils pour répondre aux questions."
+SCHEMA = 
 
 def addition(a: float, b: float) -> float:
     """Additionne deux nombres."""
@@ -13,6 +18,10 @@ OUTILS = {"addition": addition, "multiplication": multiplication}
 
 
 class agent:
+    def __init__(self, messages, question, max_tours):
+        self.messages = messages
+        self.question = question
+        self.max_tours = max_tours
 
     def appel_llm(messages: list[dict]) -> dict:
         """Envoie la conversation au modèle et renvoie son message de réponse. c'est la parti thinking du ReAct"""
@@ -22,7 +31,7 @@ class agent:
         requete = urllib.request.Request(
             OLLAMA_URL, data=corps, headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(requete, timeout=300) as response:
+        with urllib.request.urlopen(requete, timeout=300) as response: #envoie la requete au serveur ollama
             return json.load(response)["message"]
 
     def agent(question: str, max_tours: int = 6) -> tuple[str, list[str]]:
