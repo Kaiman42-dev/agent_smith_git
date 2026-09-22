@@ -1,4 +1,3 @@
-from builtins import float
 import json
 import urllib.request
 
@@ -9,7 +8,7 @@ class ClientLLM:
         self.modele = modele
     
     def appel_llm(self, messages):
-        """Envoie la conversation au modèle et renvoie son message de réponse. c'est la parti thinking du ReAct"""
+        """Envoie la conversation au modèle et renvoie son message de réponse"""
         corps = json.dumps(
             {"model": self.modele, "messages": messages, "stream": False }
         ).encode()
@@ -41,13 +40,12 @@ class Agent:
             if not appels:  # si aucun outil n'est appelé on a donc notre reponse finale
                 return message["content"], trace
 
-            
-        print(message)
         return "nombre maximum de tours atteint", trace
 
 if __name__ == "__main__":
     
-    client = ClientLLM(adress="http://localhost:11434/api/chat", modele="qwen3:1.7b")
+    client = ClientLLM(adress="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+                       , modele="qwen3:1.7b")
     test = Agent(question="combien font 2 +2", max_tours=6, client=client)
     res = test.agent_algo()
     print(res)
