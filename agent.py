@@ -40,6 +40,8 @@ SCHEMA = [
     }
 ]
 
+
+
 def addition(a: float, b: float) -> float:
     """Additionne deux nombres."""
     return float(a) + float(b)
@@ -49,7 +51,6 @@ def multiplication(a: float, b: float) -> float:
     return float(a) * float(b)
 
 OUTILS = {"addition": addition, "multiplication": multiplication}
-
 
 class agent:
     def __init__(self, question, max_tours):
@@ -91,6 +92,7 @@ class agent:
                 memoire.append(
                     {"role": "tool", "tool_name": nom, "content": str(resultat)}
                 )
+        print(message)
         return "nombre maximum de tours atteint", trace
 
 if __name__ == "__main__":
