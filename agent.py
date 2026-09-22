@@ -1,10 +1,44 @@
+from builtins import float
 import json
 import urllib.request
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODELE = "llama2"
 SYSTEM = "Tu es un agent intelligent capable d'utiliser des outils pour répondre aux questions."
-SCHEMA = 
+SCHEMA = [
+    {
+        "type" : "function",
+        "function":
+        {
+        "name": "addition",
+        "description": "Additionne deux nombres.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "a": {"type": "number", "description": "Le premier nombre."},
+                "b": {"type": "number", "description": "Le deuxième nombre."},
+            },
+            "required": ["a", "b"],
+        }
+        },
+    },
+    {
+        "type": "function",
+        "function":
+        {
+        "name": "multiplication",
+        "description": "Multiplie deux nombres.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "a": {"type": "number", "description": "Le premier nombre."},
+                "b": {"type": "number", "description": "Le deuxième nombre."},
+            },
+            "required": ["a", "b"],
+        }
+        },
+    }
+]
 
 def addition(a: float, b: float) -> float:
     """Additionne deux nombres."""
@@ -18,15 +52,14 @@ OUTILS = {"addition": addition, "multiplication": multiplication}
 
 
 class agent:
-    def __init__(self, messages, question, max_tours):
-        self.messages = messages
+    def __init__(self, question, max_tours):
         self.question = question
         self.max_tours = max_tours
 
-    def appel_llm(messages: list[dict]) -> dict:
+    def appel_llm(self, messages: list[dict]) -> dict:
         """Envoie la conversation au modèle et renvoie son message de réponse. c'est la parti thinking du ReAct"""
-        corps = json.dump(
-            {"model": MODELE, "message": messages, "tools": SCHEMA, "stream": False }
+        corps = json.dumps(
+            {"model": MODELE, "messages": messages, "tools": SCHEMA, "stream": False }
         ).encode()
         requete = urllib.request.Request(
             OLLAMA_URL, data=corps, headers={"Content-Type": "application/json"}
@@ -34,16 +67,16 @@ class agent:
         with urllib.request.urlopen(requete, timeout=300) as response: #envoie la requete au serveur ollama
             return json.load(response)["message"]
 
-    def agent(question: str, max_tours: int = 6) -> tuple[str, list[str]]:
+    def agent_algo(self, max_tours: int = 6) -> tuple[str, list[str]]:
         """fait tourner la boucle think->act->observe jusqu'a la reponse"""
         memoire=[
             {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": question}  
+            {"role": "user", "content": self.question}  
         ]
         trace: list[str] = []
 
         for _ in range(max_tours):
-            message = agent.appel_llm(memoire) # parti de thinking
+            message = self.appel_llm(memoire) # parti de thinking
             memoire.append(message) # je sauvegarde la reponse du llm en mémoire
 
             appels = message.get("tool_calls") # 
@@ -60,3 +93,6 @@ class agent:
                 )
         return "nombre maximum de tours atteint", trace
 
+if __name__ == "__main__":
+    test = agent(question="combien font 2 +2", max_tours=6 )
+    test.agent_algo()
