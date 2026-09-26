@@ -134,38 +134,21 @@ print(ft_sub(5, 2))
 
 
 
-"""
-Lecture : Tu prends un exercice du dataset.
-
-Génération : Le LLM écrit une fonction en Python pour résoudre l'exercice.
-
-Assemblage : Tu colles le code du LLM et les tests (les réponses) du dataset dans ton fichier temporaire.
-
-Vérification : La Sandbox exécute ce fichier en toute sécurité (avec subprocess.run) . Si aucune erreur ne s'affiche, le code du LLM est correct !
-
-Tu passes à la question suivant
-"""
-
-"""
-def execution_file():
-    fichier = mbpp("def ft_sub(a, b):\n    return a - b", "assert ft_sub(5, 2) == 3")
-    process = subprocess.Popen([sys.executable, fichier])
-    process.wait()
-    print("Le fichier est terminé")
-    try:
-        with open(fichier, 'r') as f:
-            c = f.read()
-            return c
-    except:
-        return "Error"
-"""
-
-
 # MODE MBBP EXPLICATION
 """
-Mode mbbp: CLI terminal ("python main.py --mode mbpp") pour lancer le programe, charge les 1000 qustion et envoie 1 par 1 au llm qui return une string 
+Mode mbbp: CLI terminal ("python main.py --mode mbpp") pour lancer le programe, envoie 1 question au au llm (question dans le json) qui return une string 
 du code qu'il pense etre juste, pour tester le code on cree un fichier temporaire dans la standbox ou on mais le code de ia et X test lier a la question du prompt du debut
-execution avec import subprocess qui va executer le fichier en securite en respectant les import le time out et la ram max si il reussi les 4 test lie a la question cest que le code de ia etait bon 
-"""
+execution avec import subprocess qui va executer le fichier en securite en respectant les import le time out et la ram max si il reussi les X test lie a la question cest que le code de ia etait bon (test de la question dans le json)
 
+ex: question.json
+[
+	(question) "task_definition": "Write a function that returns the sum of two integers.",
+    
+    (test)"test_list": [
+    "assert add(2, 2) == 4",
+    "assert add(-1, 1) == 0",
+    "assert add(10, 5) == 15"
+  ]
+
+"""
 
