@@ -2,7 +2,7 @@
   "task_id": 1,
   "task_definition": "Write a function that returns the sum of two integers.",
   "function_definition": "def add(a, b):",
-  "test_imports": [],
+  "test_imports": ["swebench/sweb.eval.x86_64.sympy_1776_sympy-23534:latest"],
   "test_list": [
     "assert add(2, 2) == 4",
     "assert add(-1, 1) == 0",

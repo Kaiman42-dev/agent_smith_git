@@ -1,0 +1,8 @@
+{
+  "instance_id": "sympy__sympy-23534",
+  "problem_statement": "The solver fails when passing a specific boolean expression. Expected True but got an exception. Steps to reproduce: \n1. Import sympy\n2. Run solver on `x & (y | ~y)`\nExpected: x\nGot: TypeError.",
+  "docker_image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-23534:latest",
+  "eval_script": "python -m pytest sympy/logic/tests/test_inference.py",
+  "hints_text": "Check the boolean evaluation logic in `sympy/logic/boolalg.py`. The issue might be related to how bitwise operators are parsed.",
+  "repo": "sympy/sympy"
+}
