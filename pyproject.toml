@@ -1,0 +1,10 @@
+[project]
+name = "agent-smith-git"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10, <3.11"
+dependencies = [
+    "dotenv>=0.9.9",
+    "python-dotenv>=1.2.3",
+]
