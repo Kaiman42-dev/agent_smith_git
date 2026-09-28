@@ -39,6 +39,10 @@ def proble():
 		return "Error"
 
 
+def list_files(directory, pattern):
+    commande = ["docker", "exec", id, "find", directory, "-name", pattern]
+    return subprocess.run(commande, capture_output=True, text=True).stdout
+
 def mcp():
 	id = image_SWE()
 	quest = proble()
@@ -56,4 +60,4 @@ def mcp():
 	print("stderr:", result.stderr)
 
 if __name__ == "__main__":
-	print(mcp)
+	print(mcp())
