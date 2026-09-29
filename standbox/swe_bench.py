@@ -24,12 +24,18 @@ def image_SWE(): # pull le image-docker
 		return id_conteneur
 	except:
 		return "Error"
+
+
+def run_in_docker(commande_bash, workdir="/testbed"):
+
+	CONTAINER_ID = image_SWE()
+	base_cmd = ["docker", "exec", "-w", workdir, CONTAINER_ID, "bash", "-c", commande_bash]
+	result = subprocess.run(base_cmd, capture_output=True, text=True)
 	
-	print("returncode:", result.returncode)
-	print("stdout:", repr(result.stdout))
-	print("stderr:", repr(result.stderr))
+	return result.stdout if result.returncode == 0 else result.stderr
 
 
+"""
 def proble():
 	try:
 		cls = p_SWE("../Json/task.json")
@@ -37,27 +43,4 @@ def proble():
 		return problem_statement
 	except:
 		return "Error"
-
-
-def list_files(directory, pattern):
-    commande = ["docker", "exec", id, "find", directory, "-name", pattern]
-    return subprocess.run(commande, capture_output=True, text=True).stdout
-
-def mcp():
-	id = image_SWE()
-	quest = proble()
-	try:
-		result = subprocess.run( # execute la question dans le id du conteneur 
-			["docker", "exec", "-w", "/testbed", id, "ls", "-la"],
-			capture_output=True,
-			text=True
-			)
-	except:
-		return "Error"
-
-	print("return code:", result.returncode)
-	print("stdout:", result.stdout)
-	print("stderr:", result.stderr)
-
-if __name__ == "__main__":
-	print(mcp())
+"""

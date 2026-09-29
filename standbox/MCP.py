@@ -1,16 +1,5 @@
 import subprocess
-
-CONTAINER_ID = ""
-
-
-def run_in_docker(commande_bash, workdir="/testbed"):
-
-    base_cmd = ["docker", "exec", "-w", workdir, CONTAINER_ID, "bash", "-c", commande_bash]
-    result = subprocess.run(base_cmd, capture_output=True, text=True)
-    
-    return result.stdout if result.returncode == 0 else result.stderr
-
-
+from swe_bench import run_in_docker
 
 
 # outil recherche de code
@@ -19,7 +8,6 @@ def search_code(pattern, file_pattern):
     return run_in_docker(commande)
 
 def search_function_or_class_definition_in_code(name):
-
     commande = f"grep -rnE '(def |class ){name}\\b' ."
     return run_in_docker(commande)
 
@@ -31,7 +19,6 @@ def find_references(name, filepath, line):
 
 # outils executions
 def run_tests():
-
     eval_script = "ta_variable_eval_script_recuperee_du_json" 
     return run_in_docker(eval_script)
 
@@ -41,3 +28,10 @@ def get_patch():
 
 def run_command(command, workdir):
     return run_in_docker(command, workdir=workdir)
+
+# test
+"""
+if __name__ == "__main__":
+	resultat = search_function_or_class_definition_in_code("Basic")
+	print(resultat)
+"""
