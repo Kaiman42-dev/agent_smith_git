@@ -1,6 +1,6 @@
 import json
 import ast
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup # type: ignore
 import re 
 
 
