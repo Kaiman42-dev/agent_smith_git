@@ -1,17 +1,19 @@
 import json
 import ast
 from bs4 import BeautifulSoup
+import re 
 
 
 # PARSING
 
 def p_mardown(s):
+	"""recupe code python qui vient de la reponse du llm"""
 	try:
-		_, rep,  = s.split("```python" or "```.")
-		res = rep.replace("```", "").strip()
-	except:
-		return ""
-	return res
+		rep  = re.findall("```python(.*?)```", s, re.DOTALL) # renvoie une liste a un element, (.*?) balise de capture, re.DOTALL capture vraiment tout
+		print(rep)
+	except Exception as e:
+		print(e)
+	return rep
 
 def p_json(s):
 	try:
@@ -50,23 +52,9 @@ def p_ReAct(s):
 
 
 if __name__ == "__main__":
-	aa = """Thought: I need to check the configuration file to understand the environment.
+	aa = """Thought: I```python need to check the configuration file to understand the environment.
 	Action: read_file
-	Action Input: {"filepath": "/testbed/config.json", "start_line": 1, "end_line": 100}"""
-	resultat = p_ReAct(aa)
-	print(resultat)
-
-
-
-
-
-"""
-def parsing(s):
-    _, rep, _ = s.split("```" or "```.")
-    clear = rep[6:].strip()
-    _, a = clear.split('(')
-    clear = a[1:-1]
-    c, a , b = clear.split(",")
-    lst = [c[:-1], int(a.strip()), int(b.strip())]
-    print(lst)
-"""
+	Action Input: {"filepath": "/testbed/config.json", "start_line": 1, "end_line": 100}```"""
+	res = p_mardown(aa)
+	#resultat = p_ReAct(aa)
+	#print(res)
