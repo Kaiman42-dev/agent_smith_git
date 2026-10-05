@@ -10,10 +10,13 @@ def p_mardown(s):
 	"""recupe code python qui vient de la reponse du llm"""
 	try:
 		rep  = re.findall("```python(.*?)```", s, re.DOTALL) # renvoie une liste a un element, (.*?) balise de capture, re.DOTALL capture vraiment tout
-		print(rep)
+		#print(rep)
 	except Exception as e:
 		print(e)
-	return rep
+		return None
+	if not rep: # pas de bloc python = pas de code a executer
+		return None
+	return rep[0]
 
 def p_json(s):
 	try:
@@ -57,4 +60,4 @@ if __name__ == "__main__":
 	Action Input: {"filepath": "/testbed/config.json", "start_line": 1, "end_line": 100}```"""
 	res = p_mardown(aa)
 	#resultat = p_ReAct(aa)
-	#print(res)
+	print(res)
