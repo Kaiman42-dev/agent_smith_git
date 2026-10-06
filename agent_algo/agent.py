@@ -88,16 +88,16 @@ class ClientLLM:
                 usage = reponse.get("usage") or {}  # nombre de tokens renvoye par l'API
                 self.input_tokens = usage.get("prompt_tokens", 0)
                 self.output_tokens = usage.get("completion_tokens", 0)
-                return reponse["choices"][0]["message"] # retourne la reponse du serveur
+                return reponse["choices"][0]["message"], None # retourne la reponse du serveur
             except urllib.error.HTTPError as e:
                 logging.error(f"Echec HTTP. Code {e.code}, Raison {e.reason}")
                 # je distingue les erreurs 400 et 404 pour ne pas réessayer inutilement (erreures de requete ou ressource non trouvée)
-                if e.code in (429):
+                if e.code == 429:
                     logging.error(f"Trop de requetes {e.code}. Attente avant de reessayer...")
-                    return None
+                    return None, e.code
                 if e.code in(400, 404):
                     logging.error(f"Erreur critique {e.code}, arret de l'agent.")
-                    return None
+                    return None, e.code
                 attente = e.headers.get("Retry-After") if e.headers else None  # le serveur peut dire combien attendre
                 i = i + 1
                 self.attendre(i, attente)
@@ -105,7 +105,7 @@ class ClientLLM:
                 logging.error(f"Echec URL. Raison {e.reason}")
                 i = i + 1
                 self.attendre(i)
-        return None
+        return None, None  # si on a fait 5 essais sans succes, on renvoie None
 
     def attendre(self, essai, attente=None):
         """attend avant de reessayer : 1s, 2s, 4s, 8s... (ou ce que demande le serveur), max 20s"""
