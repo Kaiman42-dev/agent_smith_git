@@ -42,8 +42,8 @@ Outils disponibles (deja importes) :
 
 Quand tu as la reponse finale, reponds SANS bloc ```python```, en commencant par "Final Answer:".
 """
-URL = {"groq": {"https://api.groq.com/openai/v1/chat/completions": "modele"}, 
-       "gemini": {"https://generativelanguage.googleapis.com/v1beta/openai/chat/completions": "gemini-3.6-flash"}}
+URL = {"groq": {"url": "https://api.groq.com/openai/v1/chat/completions", "modele": "modele"}, 
+       "gemini": {"url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "modele": "gemini-3.6-flash"}}
 
 def executer_code(code, namespace):
     """execute le code du llm et renvoie ce qui a ete affiche (stdout + erreurs)"""
@@ -167,8 +167,8 @@ if __name__ == "__main__":
     try:
         load_dotenv()
         api_key = os.getenv("GEMINI_API_KEY")
-        client = ClientLLM(adress=URL["gemini"]["https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"]
-                        , modele="gemini-3.6-flash", key=api_key)
+        client = ClientLLM(adress=URL["gemini"]["url"]
+                        , modele=URL["gemini"]["modele"], key=api_key)
         test = Agent(question="combien font 2 + 2", max_tours=6, client=client)
         res = test.agent_algo()
         print(res)
