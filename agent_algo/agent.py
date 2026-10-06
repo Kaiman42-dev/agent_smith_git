@@ -42,7 +42,7 @@ Outils disponibles (deja importes) :
 
 Quand tu as la reponse finale, reponds SANS bloc ```python```, en commencant par "Final Answer:".
 """
-URL = {"groq": {"url": "https://api.groq.com/openai/v1/chat/completions", "modele": "modele"}, 
+URL = {"groq": {"url": "https://api.groq.com/openai/v1/chat/completions", "modele": "openai/gpt-oss-120b"}, 
        "gemini": {"url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "modele": "gemini-3.6-flash"}}
 
 def executer_code(code, namespace):
@@ -92,7 +92,11 @@ class ClientLLM:
             except urllib.error.HTTPError as e:
                 logging.error(f"Echec HTTP. Code {e.code}, Raison {e.reason}")
                 # je distingue les erreurs 400 et 404 pour ne pas réessayer inutilement (erreures de requete ou ressource non trouvée)
+                if e.code in (429):
+                    logging.error(f"Trop de requetes {e.code}. Attente avant de reessayer...")
+                    return None
                 if e.code in(400, 404):
+                    logging.error(f"Erreur critique {e.code}, arret de l'agent.")
                     return None
                 attente = e.headers.get("Retry-After") if e.headers else None  # le serveur peut dire combien attendre
                 i = i + 1
