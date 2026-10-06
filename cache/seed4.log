@@ -4,35 +4,4 @@ Task saved to: /Users/salman/Desktop/projet_42/agent_smith_git/cache/seed4/mbpp_
 
 --- 2/3 run your agent (timeout 120s) ---
 warning: `VIRTUAL_ENV=moulinette/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
-solution ecrite dans /Users/salman/Desktop/projet_42/agent_smith_git/cache/seed4/mbpp_solution.json (succes=True, tours=2)
-Agent finished in 28.7s
-
---- 3/3 validate ---
-
-============================================================
-VALIDATING SOLUTION
-============================================================
-Task ID: 251
-Benchmark: mbpp
-Success claimed: True
-
-============================================================
-STEP 1: CORRECTNESS VALIDATION
-============================================================
-Correctness: PASSED
-
-============================================================
-STEP 2: METRICS VALIDATION
-============================================================
-Iterations: 2 / 10 OK
-Input tokens: 484 / 6000 OK
-Output tokens: 144 / 1500 OK
-Time: 28.5s / 120.0s OK
-Metrics: VALID
-
-============================================================
-FINAL RESULT
-============================================================
-Correctness: PASSED
-Metrics: VALID
-Overall: PASSED
+Agent exceeded time limit (120s) — killed

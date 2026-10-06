@@ -5,7 +5,7 @@ import json
 import os
 import time
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv # type: ignore
 
 from agent_algo.agent import Agent, ClientLLM
 from models_public import MBPPTaskInput, SolutionOutput

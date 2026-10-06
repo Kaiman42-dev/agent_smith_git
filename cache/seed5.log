@@ -6,7 +6,7 @@ Task saved to: /Users/salman/Desktop/projet_42/agent_smith_git/cache/seed5/mbpp_
 warning: `VIRTUAL_ENV=moulinette/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
 ERROR:root:Echec HTTP. Code 503, Raison Service Unavailable
 solution ecrite dans /Users/salman/Desktop/projet_42/agent_smith_git/cache/seed5/mbpp_solution.json (succes=True, tours=2)
-Agent finished in 18.2s
+Agent finished in 63.7s
 
 --- 3/3 validate ---
 
@@ -26,9 +26,9 @@ Correctness: PASSED
 STEP 2: METRICS VALIDATION
 ============================================================
 Iterations: 2 / 10 OK
-Input tokens: 412 / 6000 OK
-Output tokens: 130 / 1500 OK
-Time: 18.0s / 120.0s OK
+Input tokens: 407 / 6000 OK
+Output tokens: 125 / 1500 OK
+Time: 63.6s / 120.0s OK
 Metrics: VALID
 
 ============================================================
