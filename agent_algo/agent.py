@@ -42,8 +42,9 @@ Outils disponibles (deja importes) :
 
 Quand tu as la reponse finale, reponds SANS bloc ```python```, en commencant par "Final Answer:".
 """
-URL = {"groq": {"url": "https://api.groq.com/openai/v1/chat/completions", "modele": "openai/gpt-oss-120b"}, 
-       "gemini": {"url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "modele": "gemini-3.6-flash"}}
+FOURNISSEUR = [{"nom" : "groq", "url": "https://api.groq.com/openai/v1/chat/completions", "modele": "openai/gpt-oss-120b", "key_env": "GROQ_API_KEY"},
+       {"nom":"gemini", "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "modele": "gemini-3.6-flash", "key_env": "GEMINI_API_KEY"}]
+
 
 def executer_code(code, namespace):
     """execute le code du llm et renvoie ce qui a ete affiche (stdout + erreurs)"""
@@ -124,6 +125,17 @@ class Agent:
         self.client = client
         self.prompt_systeme = prompt_systeme  # modifiable : MBPP a besoin d'un prompt plus court
         self.succes = False  # passe a True si le llm donne une reponse finale
+        self.index_fournisseur = 0  # index du fournisseur actuel dans la liste FOURNISSEUR
+
+    def creer_client(self, index):
+        """créé un nv client LLM à partir de l'index dans la liste LLM"""
+        fournisseur = FOURNISSEUR[index]
+        nom_variable = FOURNISSEUR["nom"].upper() + "_API_KEY"
+        api_key = os.getenv(nom_variable)
+        if not api_key:
+            raise ValueError(f"Clé API manquante pour {fournisseur['nom']}. Veuillez définir la variable d'environnement {nom_variable}.")
+        return ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key)
+        
 
     def agent_algo(self) -> tuple[str, list[StepMetrics]]:
         """fait tourner la boucle think->act->observe jusqu'a la reponse"""
@@ -135,9 +147,21 @@ class Agent:
         namespace = dict(OUTILS)  # garde les variables du llm d'un tour a l'autre
 
         for tour in range(1, self.max_tours + 1):
-            message = self.client.appel_llm(memoire) # parti de thinking
+            message, code_erreur = self.client.appel_llm(memoire) # parti de thinking
             if message is None:  # si le llm ne repond pas on sort de la boucle
-                return "le llm ne repond pas", steps
+                if code_erreur is 429:
+                    self.index_fournisseur += 1
+                    if self.index_fournisseur >= len(FOURNISSEUR):
+                        return f"Plus de fournisseurs disponibles, arret de l'agent.", steps
+                    client = FOURNISSEUR[self.index_fournisseur]  # on change de fournisseur si trop de requetes
+                    self.client = self.creer_client(self.index_fournisseur)
+                    memoire.append({"role": "user", "content": f"Erreur 429 du serveur {client['nom']}, je change de fournisseur et reessaye."})
+                    continue
+                if code_erreur is None:
+                    return f"Erreur du serveur, arret de l'agent.", steps
+                if code_erreur in (400, 404):
+                    return f"Erreur critique {code_erreur} du serveur, arret de l'agent.", steps
+                return f"Erreur du serveur, arret de l'agent.", steps
             contenu = message.get("content") or ""
             memoire.append({"role": "assistant", "content": contenu}) # je sauvegarde la reponse du llm en mémoire
 
@@ -171,8 +195,8 @@ if __name__ == "__main__":
     try:
         load_dotenv()
         api_key = os.getenv("GEMINI_API_KEY")
-        client = ClientLLM(adress=URL["gemini"]["url"]
-                        , modele=URL["gemini"]["modele"], key=api_key)
+        client = ClientLLM(adress=LLM["gemini"]["url"]
+                        , modele=LLM["gemini"]["modele"], key=api_key)
         test = Agent(question="combien font 2 + 2", max_tours=6, client=client)
         res = test.agent_algo()
         print(res)
