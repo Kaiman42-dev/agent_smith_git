@@ -45,6 +45,14 @@ Quand tu as la reponse finale, reponds SANS bloc ```python```, en commencant par
 FOURNISSEUR = [{"nom" : "groq", "url": "https://api.groq.com/openai/v1/chat/completions", "modele": "openai/gpt-oss-120b", "key_env": "GROQ_API_KEY"},
        {"nom":"gemini", "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "modele": "gemini-3.6-flash", "key_env": "GEMINI_API_KEY"}]
 
+def creer_client(index):
+    """créé un nv client LLM à partir de l'index dans la liste LLM"""
+    fournisseur = FOURNISSEUR[index]
+    nom_variable = fournisseur["key_env"]
+    api_key = os.getenv(nom_variable)
+    if not api_key:
+        raise ValueError(f"Clé API manquante pour {fournisseur['nom']}. Veuillez définir la variable d'environnement {nom_variable}.")
+    return ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key)
 
 def executer_code(code, namespace):
     """execute le code du llm et renvoie ce qui a ete affiche (stdout + erreurs)"""
@@ -108,6 +116,7 @@ class ClientLLM:
                 self.attendre(i)
         return None, None  # si on a fait 5 essais sans succes, on renvoie None
 
+
     def attendre(self, essai, attente=None):
         """attend avant de reessayer : 1s, 2s, 4s, 8s... (ou ce que demande le serveur), max 20s"""
         if essai > 5:  # plus d'essai apres, inutile d'attendre
@@ -118,6 +127,7 @@ class ClientLLM:
             secondes = 2 ** (essai - 1)
         time.sleep(min(secondes, 20))
 
+
 class Agent:
     def __init__(self, question, max_tours, client, prompt_systeme=PROMPT_SYSTEME):
         self.question = question
@@ -127,15 +137,6 @@ class Agent:
         self.succes = False  # passe a True si le llm donne une reponse finale
         self.index_fournisseur = 0  # index du fournisseur actuel dans la liste FOURNISSEUR
 
-    def creer_client(self, index):
-        """créé un nv client LLM à partir de l'index dans la liste LLM"""
-        fournisseur = FOURNISSEUR[index]
-        nom_variable = fournisseur["key_env"]
-        api_key = os.getenv(nom_variable)
-        if not api_key:
-            raise ValueError(f"Clé API manquante pour {fournisseur['nom']}. Veuillez définir la variable d'environnement {nom_variable}.")
-        return ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key)
-        
 
     def agent_algo(self) -> tuple[str, list[StepMetrics]]:
         """fait tourner la boucle think->act->observe jusqu'a la reponse"""
@@ -154,7 +155,7 @@ class Agent:
                     if self.index_fournisseur >= len(FOURNISSEUR):
                         return f"Plus de fournisseurs disponibles, arret de l'agent.", steps
                     client = FOURNISSEUR[self.index_fournisseur]  # on change de fournisseur si trop de requetes
-                    self.client = self.creer_client(self.index_fournisseur)
+                    self.client = creer_client(self.index_fournisseur)
                     memoire.append({"role": "user", "content": f"Erreur 429 du serveur {client['nom']}, je change de fournisseur et reessaye."})
                     continue
                 if code_erreur is None:
@@ -195,8 +196,8 @@ if __name__ == "__main__":
     try:
         load_dotenv()
         api_key = os.getenv("GEMINI_API_KEY")
-        client = ClientLLM(adress=FOURNISSEUR["gemini"]["url"]
-                        , modele=FOURNISSEUR["gemini"]["modele"], key=api_key)
+        fournisseur = FOURNISSEUR[0]
+        client = creer_client(0)  # crée un client LLM pour le fournisseur à l'index 0
         test = Agent(question="combien font 2 + 2", max_tours=6, client=client)
         res = test.agent_algo()
         print(res)
