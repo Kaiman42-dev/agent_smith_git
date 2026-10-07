@@ -195,8 +195,6 @@ class Agent:
 if __name__ == "__main__":
     try:
         load_dotenv()
-        api_key = os.getenv("GEMINI_API_KEY")
-        fournisseur = FOURNISSEUR[0]
         client = creer_client(0)  # crée un client LLM pour le fournisseur à l'index 0
         test = Agent(question="combien font 2 + 2", max_tours=6, client=client)
         res = test.agent_algo()
