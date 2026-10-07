@@ -29,10 +29,14 @@ def image_SWE():
 def run_in_docker(commande_bash, workdir="/testbed"):
 
 	CONTAINER_ID = image_SWE() # execute
+	if CONTAINER_ID is None:
+		return
 	base_cmd = ["docker", "exec", "-w", workdir, CONTAINER_ID, "bash", "-c", commande_bash]
 	result = subprocess.run(base_cmd, capture_output=True, text=True)
 	
 	return result.stdout if result.returncode == 0 else result.stderr
+
+
 
 """
 def proble():

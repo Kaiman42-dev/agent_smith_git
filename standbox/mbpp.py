@@ -1,3 +1,5 @@
+from pickle import NONE
+from config_sandbox import Conifg_Sandbox
 from pydantic import BaseModel, Field
 from multiprocessing import Process
 from typing import List
@@ -7,45 +9,23 @@ import subprocess
 import sys
 
 
-
-# La configuration de la stanbox
-class Conifg_Sandbox(BaseModel):
-    
-    max_execution_time_seconds: int = 30
-    
-    max_memory_mb: int = 512
-
-    allowed_directories: List[str] = Field(default_factory=lambda: [
-			"/testbed", "/tmp/agent"
-		])
-    
-    authorized_imports: List[str] = Field(default_factory=lambda: [
-        "math", "math.*", "collections", "collections.*",
-        "itertools", "re", "json", "typing", "typing.*",
-        "functools", "operator", "heapq", "bisect", "copy",
-        "string", "random", "datetime", "datetime.*",
-        "array", "cmath",
-    ])
-         
-
-def mbpp(code_ia, data_mbpp): # cree le fichier temporaire et ajoute le code de ia et les test a faire
-    #Info_config = Conifg_Sandbox()
+def mbpp(code_ia, data_mbpp, config=None):
+    if config is None:
+        config = Conifg_Sandbox()
+        
     try:
         with tempfile.NamedTemporaryFile(mode='w+', suffix=".py", delete=False) as f:
             name_file = f.name
             
+            f.write(config.text_config())
+            f.write("\n\n")
             f.write(code_ia)
             f.write("\n\n")
             f.write(data_mbpp)
-            return (name_file)
-            
-            f.seek(0) # remonte en haut du fichier
-            
+            return name_file
+
     except:
         return f"Error"
-    
-    os.remove(name_file)
-
 
 def executer_code(fichier, config=None): # executer le fichier temporaire
 
