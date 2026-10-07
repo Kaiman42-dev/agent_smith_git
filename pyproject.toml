@@ -8,6 +8,7 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "bs4>=0.0.2",
     "dotenv>=0.9.9",
+    "groq>=1.7.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.2.3",
 ]

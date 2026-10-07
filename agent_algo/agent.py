@@ -130,7 +130,7 @@ class Agent:
     def creer_client(self, index):
         """créé un nv client LLM à partir de l'index dans la liste LLM"""
         fournisseur = FOURNISSEUR[index]
-        nom_variable = FOURNISSEUR["nom"].upper() + "_API_KEY"
+        nom_variable = fournisseur["key_env"]
         api_key = os.getenv(nom_variable)
         if not api_key:
             raise ValueError(f"Clé API manquante pour {fournisseur['nom']}. Veuillez définir la variable d'environnement {nom_variable}.")
@@ -149,7 +149,7 @@ class Agent:
         for tour in range(1, self.max_tours + 1):
             message, code_erreur = self.client.appel_llm(memoire) # parti de thinking
             if message is None:  # si le llm ne repond pas on sort de la boucle
-                if code_erreur is 429:
+                if code_erreur == 429:
                     self.index_fournisseur += 1
                     if self.index_fournisseur >= len(FOURNISSEUR):
                         return f"Plus de fournisseurs disponibles, arret de l'agent.", steps
@@ -195,8 +195,8 @@ if __name__ == "__main__":
     try:
         load_dotenv()
         api_key = os.getenv("GEMINI_API_KEY")
-        client = ClientLLM(adress=LLM["gemini"]["url"]
-                        , modele=LLM["gemini"]["modele"], key=api_key)
+        client = ClientLLM(adress=FOURNISSEUR["gemini"]["url"]
+                        , modele=FOURNISSEUR["gemini"]["modele"], key=api_key)
         test = Agent(question="combien font 2 + 2", max_tours=6, client=client)
         res = test.agent_algo()
         print(res)
