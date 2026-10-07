@@ -16,7 +16,6 @@ def find_references(name, filepath, line):
     return run_in_docker(commande)
 
 
-
 # outils executions
 def run_tests():
     eval_script = "ta_variable_eval_script_recuperee_du_json" 
@@ -29,9 +28,8 @@ def get_patch():
 def run_command(command, workdir):
     return run_in_docker(command, workdir=workdir)
 
-# test
-"""
+
+
 if __name__ == "__main__":
 	resultat = search_function_or_class_definition_in_code("Basic")
 	print(resultat)
-"""
