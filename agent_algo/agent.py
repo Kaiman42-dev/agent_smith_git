@@ -91,7 +91,7 @@ class ClientLLM:
             self.total_requetes += 1
             debut = time.perf_counter()
             try:
-                with urllib.request.urlopen(requete, timeout=300) as response: #envoie la requete au serveur
+                with urllib.request.urlopen(requete, timeout=40) as response: #envoie la requete au serveur
                     reponse = json.load(response)
                 self.temps_ms = (time.perf_counter() - debut) * 1000
                 usage = reponse.get("usage") or {}  # nombre de tokens renvoye par l'API
@@ -112,6 +112,10 @@ class ClientLLM:
                 self.attendre(i, attente)
             except urllib.error.URLError as e:
                 logging.error(f"Echec URL. Raison {e.reason}")
+                i = i + 1
+                self.attendre(i)
+            except TimeoutError as e:
+                logging.error(f"Timeout. Raison {e}")
                 i = i + 1
                 self.attendre(i)
         return None, None  # si on a fait 5 essais sans succes, on renvoie None
