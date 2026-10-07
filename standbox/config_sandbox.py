@@ -22,6 +22,9 @@ class Conifg_Sandbox(BaseModel):
     def text_config(self) -> str:
         return f"""import resource
 import builtins
+import os
+import socket
+
 
 try:
     ram_bytes = {self.max_memory_mb} * 1024 * 1024
@@ -29,15 +32,39 @@ try:
 except:
     pass
 
+
+def block_socket(*args, **kwargs):
+    raise PermissionError("Réseau bloqué par la Sandbox")
+socket.socket = block_socket
+
+
+_orig_open = builtins.open
+ALLOWED_DIRS = {self.allowed_directories}
+
+def safe_open(file, *args, **kwargs):
+    abs_path = os.path.abspath(file)
+
+    if not any(abs_path.startswith(os.path.abspath(d)) for d in ALLOWED_DIRS):
+        raise PermissionError(f"Accès interdit au fichier : {{file}}")
+    return _orig_open(file, *args, **kwargs)
+
+builtins.open = safe_open
+
+
 _orig_import = builtins.__import__
+ALLOWED_IMPORTS = {self.authorized_imports}
+
 def safe_import(name, *args, **kwargs):
-    if name.split('.')[0] not in {self.authorized_imports} and name not in {self.authorized_imports}:
+    base_name = name.split('.')[0]
+    if name not in ALLOWED_IMPORTS and base_name not in ALLOWED_IMPORTS and f"{{base_name}}.*" not in ALLOWED_IMPORTS:
         raise ImportError(f"Import interdit par la Sandbox : {{name}}")
     return _orig_import(name, *args, **kwargs)
 
 builtins.__import__ = safe_import
+
 del builtins.eval
 del builtins.exec
+del builtins.compile
 
 def final_answer(result):
     print(f"FINAL_ANSWER: {{result}}")

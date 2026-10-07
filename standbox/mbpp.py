@@ -8,11 +8,9 @@ import tempfile
 import subprocess
 import sys
 
-
-def mbpp(code_ia, data_mbpp, config=None):
+def file_temp(code_ia, data_mbpp, config=None):
     if config is None:
         config = Conifg_Sandbox()
-        
     try:
         with tempfile.NamedTemporaryFile(mode='w+', suffix=".py", delete=False) as f:
             name_file = f.name
@@ -24,45 +22,51 @@ def mbpp(code_ia, data_mbpp, config=None):
             f.write(data_mbpp)
             return name_file
 
-    except:
-        return f"Error"
+    except Exception:
+        return "Error"
 
-def executer_code(fichier, config=None): # executer le fichier temporaire
+def executer_code(fichier, config=None):
 
     if config is None:
         config = Conifg_Sandbox()
 
+    MAX_OBSERVATION = 5000
     try:
-        process = subprocess.run( # lit le fichier et execute tout seul !
+        process = subprocess.run( # lit le fichier et execute
             [sys.executable, fichier],
             capture_output=True,
             text=True,
             timeout=config.max_execution_time_seconds
         )
+        output = process.stdout
+        if len(output) > MAX_OBSERVATION:
+            output = output[:MAX_OBSERVATION] + "[cut-off text too long]"
 
         if process.returncode == 0: # si il a reussi a executer
             return {
                 "success": True,
-                "output": process.stdout,
+                "output": output,
                 "error": process.stderr,
                 "returncode": process.returncode
             }
 
         return { 
             "success": False,
-            "output": process.stdout,
+            "output": output,
             "error": process.stderr,
             "returncode": process.returncode
         }
 
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
+        out = e.stdout or ""
+        
+        if len(out) > MAX_OBSERVATION:
+            out = out[:MAX_OBSERVATION] + "[cut-off text too long]"
+            
         return {
             "success": False,
-            "output": "",
-            "error": (
-                f"time out"
-                f"{config.max_execution_time_seconds} secondes"
-            ),
+            "output": out,
+            "error": f"Timeout ({config.max_execution_time_seconds}s)",
             "returncode": -1
         }
 
@@ -79,7 +83,7 @@ def run_test(code_ia, data_mbpp): # run
 
     config = Conifg_Sandbox()
 
-    fichier = mbpp(code_ia, data_mbpp)
+    fichier = file_temp(code_ia, data_mbpp)
 
     if fichier is None:
         return "Error"
