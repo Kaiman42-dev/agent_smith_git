@@ -13,6 +13,9 @@ dependencies = [
     "python-dotenv>=1.2.3",
 ]
 
+[project.scripts]
+sandbox = "sandbox_cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
