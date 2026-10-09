@@ -1,12 +1,9 @@
-from pathlib import Path
 import os
 import subprocess
-
 
 #verification du code faite par loutil (moulinette)
 def run_tests(eval_script_path="eval.sh"):
     testbed_path = os.environ.get("TESTBED_PATH", "/testbed")
-    
     try:
         result = subprocess.run(
             ["bash", eval_script_path], 
@@ -15,28 +12,15 @@ def run_tests(eval_script_path="eval.sh"):
             text=True, 
             timeout=300
         )
-        return {
-            "success": result.returncode == 0, 
-            "stdout": result.stdout, 
-            "stderr": result.stderr, 
-            "exit_code": result.returncode
-        }
+        return f"Exit code: {result.returncode}\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
     except subprocess.TimeoutExpired:
-        return {
-            "success": False,
-            "error": "Timeout"
-        }
-    except Exception as e:
-        return {
-            "success": False, 
-            "error": f"Error system {str(e)}"
-        }
-
+        return "Error: Timeout after 300 seconds."
+    except Exception as err:
+        return f"Error: {err}"
 
 # compare le fichier avant et apres la modification faite par l'outil
 def get_patch():
     testbed_path = os.environ.get("TESTBED_PATH", "/testbed")
-    
     try:
         result = subprocess.run(
             ["git", "-c", "core.fileMode=false", "diff"],
@@ -44,17 +28,14 @@ def get_patch():
             capture_output=True,
             text=True
         )
-        return result.stdout
-        
-    except Exception as e:
-        return f"Error: {str(e)}"
-
+        return result.stdout if result.stdout else "No changes found."
+    except Exception as err:
+        return f"Error: {err}"
 
 # permet de regarde les text ou erreur dans le terminal example: (ls, python script.py)
 def run_command(command, workdir=None):
     if workdir is None:
         workdir = os.environ.get("TESTBED_PATH", "/testbed")
-        
     try:
         result = subprocess.run(
             command,
@@ -64,21 +45,8 @@ def run_command(command, workdir=None):
             text=True,
             timeout=120
         )
-        
-        return {
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "exit_code": result.returncode
-        }
-        
+        return f"Exit code: {result.returncode}\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
     except subprocess.TimeoutExpired:
-        return {
-            "error": "Timeout",
-            "exit_code": -1
-        }
-        
-    except Exception as e:
-        return {
-            "error": f"Error systme {str(e)}",
-            "exit_code": -1
-        }
+        return "Error: Timeout after 120 seconds."
+    except Exception as err:
+        return f"Error: {err}"
