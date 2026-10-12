@@ -11,6 +11,8 @@ import logging
 import traceback
 import contextlib
 from pathlib import Path
+from standbox.mbpp import file_temp, run_sandbox
+from standbox.config_sandbox import Conifg_Sandbox
 
 # permet d'importer Extraction_llm et outils/ qui sont a la racine du projet
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -54,15 +56,22 @@ def creer_client(index):
         raise ValueError(f"Clé API manquante pour {fournisseur['nom']}. Veuillez définir la variable d'environnement {nom_variable}.")
     return ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key)
 
+historique_code = ""
+
 def executer_code(code, namespace):
     """execute le code du llm et renvoie ce qui a ete affiche (stdout + erreurs)"""
-    sortie = io.StringIO()
-    try:
-        with contextlib.redirect_stdout(sortie):
-            exec(code, namespace)
-    except Exception:
-        sortie.write(traceback.format_exc(limit=-1))
-    observation = sortie.getvalue() or "(le code a tourne sans erreur, rien n'a ete affiche)"
+    global historique_code
+    
+    historique_code += code + "\n"
+    
+    file = file_temp(historique_code, namespace)
+    
+    resultat = run_sandbox(file)
+
+    texte = resultat["error"] if resultat["error"] else resultat["output"]
+    
+    observation = texte or "(le code a tourne sans erreur, rien n'a ete affiche)"
+    
     return observation[:MAX_OBSERVATION]
 
 class ClientLLM:

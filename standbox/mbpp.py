@@ -1,5 +1,5 @@
 from pickle import NONE
-from config_sandbox import Conifg_Sandbox
+from .config_sandbox import Conifg_Sandbox
 from pydantic import BaseModel, Field
 from multiprocessing import Process
 from typing import List
@@ -25,7 +25,7 @@ def file_temp(code_ia, data_mbpp, config=None):
     except Exception:
         return "Error"
 
-def executer_code(fichier, config=None):
+def run_sandbox(fichier, config=None):
 
     if config is None:
         config = Conifg_Sandbox()
@@ -89,7 +89,7 @@ def run_test(code_ia, data_mbpp): # run
         return "Error"
 
     try:
-        resultat = executer_code(fichier, config)
+        resultat = run_sandbox(fichier, config)
         return resultat
 
     finally:
