@@ -1,4 +1,4 @@
-from Parsing import p_SWE
+from .Parsing import p_SWE
 import subprocess
 import os
 

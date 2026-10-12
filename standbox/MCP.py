@@ -1,5 +1,5 @@
 import subprocess
-from swe_bench import run_in_docker
+from .swe_bench import run_in_docker
 
 
 # outil recherche de code

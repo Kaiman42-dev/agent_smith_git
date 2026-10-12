@@ -1,7 +1,7 @@
 import argparse
 import sys
 import readline
-from mbpp import file_temp, executer_code
+from .mbpp import file_temp, executer_code
 
 def main():
     """
