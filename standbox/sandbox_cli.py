@@ -24,7 +24,7 @@ def main():
             resultat = executer_code(fichier)
             
             if resultat["output"]:
-                print(f"Answer: {resultat["output"].strip()}")
+                print(f"Answer: {resultat['output'].strip()}")
             if resultat["error"]:
                 print(resultat["error"].strip(), file=sys.stderr)
                 

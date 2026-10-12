@@ -19,7 +19,8 @@ def search_code(pattern, file_pattern):
                     with f.open("r", encoding="utf-8") as fichier:
                         for nbr_ligne, ligne in enumerate(fichier, start=1):
                             if pattern in ligne:
-                                res.append(f"{f.absolute()}:{nbr_ligne} {ligne.rstrip('\r\n')}")
+                                contenu = ligne.rstrip('\r\n')
+                                res.append(f"{f.absolute()}:{nbr_ligne} {contenu}")
                 except UnicodeDecodeError:
                     pass
         return "\n".join(res) if res else "no results"
