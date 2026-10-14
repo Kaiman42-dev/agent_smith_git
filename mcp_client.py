@@ -18,7 +18,8 @@ prompt_args = {
 async def main():
 
     params = StdioServerParameters(command="python3", args=["mcp_tools_mbpp.py"])
-    async with stdio_client(params) as streams:
+    async with stdio_client(params) as streams: # stdio_client returns a pair of streams (reader, writer), il sert à communiquer avec le serveur mcp_tools_mbpp.py via stdio
+        print("Connected to the MCP server via stdio.")
         async with ClientSession(streams[0], streams[1]) as session:
             await session.initialize()
             result = await session.list_tools()
