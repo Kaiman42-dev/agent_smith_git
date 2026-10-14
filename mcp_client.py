@@ -1,5 +1,4 @@
 import asyncio
-import inspect
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
@@ -8,7 +7,13 @@ test_input = {
 def add(a, b):
     return a + b
 """,
-    "test_list": ["assert add(1, 2) == 5", "assert add(-1, 1) == 1"]
+    "test_list": ["assert add(1, 2) == 3", "assert add(-1, 1) == 0"]
+}
+
+prompt_args = {
+    "task_definition": """ faire une adition""",
+    "function_definition": """ def add(a,b):""",
+    "test_list": """assert add(1,2) == 3 \nassert add(-1,1) == 0"""
 }
 async def main():
 
@@ -29,4 +34,11 @@ async def main():
 
             result_read = await session.read_resource("mbpp://limits")
             print(f"read ressource = {result_read}\n")
+        
+            list_prompt = await session.list_prompts()
+            print(f"\nlist_promp = {list_prompt}\n")
+        
+            result_prompt = await session.get_prompt(list_prompt.prompts[0].name, prompt_args)
+            print(f"\nresult_prompt = {result_prompt}")
+            
 asyncio.run(main())
