@@ -9,6 +9,7 @@ from dotenv import load_dotenv # type: ignore
 
 from agent_algo.agent import Agent, ClientLLM
 from models_public import MBPPTaskInput, SolutionOutput
+from sandbox.sandbox import Sandbox
 
 MAX_TOURS = 10  # limite de la moulinette pour MBPP
 
@@ -67,13 +68,16 @@ def main():
         url += "/chat/completions"
     client = ClientLLM(adress=url, modele=args.model_name, key=os.getenv("GEMINI_API_KEY"))
 
-    agent = Agent(question=construire_question(tache), max_tours=MAX_TOURS, client=client, prompt_systeme=PROMPT_MBPP)
     erreur = None
-    try:
-        reponse, steps = agent.agent_algo()
-    except Exception as e:  # on ecrit quand meme solution.json pour ne pas perdre les metriques
-        reponse, steps = str(e), []
-        erreur = f"crash de l'agent : {e}"
+    # one sandbox process for the whole task: variables persist between steps
+    with Sandbox() as sandbox:
+        agent = Agent(question=construire_question(tache), max_tours=MAX_TOURS, client=client,
+                      sandbox=sandbox, prompt_systeme=PROMPT_MBPP)
+        try:
+            reponse, steps = agent.agent_algo()
+        except Exception as e:  # on ecrit quand meme solution.json pour ne pas perdre les metriques
+            reponse, steps = str(e), []
+            erreur = f"crash de l'agent : {e}"
 
     # nom de la fonction a partir de "def add(a, b):"
     nom_fonction = tache.function_definition.split("def ")[-1].split("(")[0].strip()

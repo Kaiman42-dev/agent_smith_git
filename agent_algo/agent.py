@@ -11,38 +11,28 @@ import logging
 import traceback
 import contextlib
 from pathlib import Path
-from sandbox.mbpp import file_temp, run_sandbox
-from sandbox.config_sandbox import Conifg_Sandbox
 
 # permet d'importer Extraction_llm et outils/ qui sont a la racine du projet
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from Extraction_llm import p_mardown
 from models_public import StepMetrics
-from outils.file_systeme_tool import read_file, edit_file, list_files
-from outils.code_search_tools import search_code, search_function_or_class_definition_in_code, find_references
-from outils.execution_tools import run_tests, get_patch, run_command
-
-# les outils que le llm peut appeler dans son code
-OUTILS = {f.__name__: f for f in (
-    read_file, edit_file, list_files,
-    search_code, search_function_or_class_definition_in_code, find_references,
-    run_tests, get_patch, run_command,
-)}
+from sandbox.protocol import ExecutionResult
+from sandbox.sandbox import Sandbox
 
 MAX_OBSERVATION = 5000  # sert a couper les observations trop longues pour ne pas exploser le contexte
 
-PROMPT_SYSTEME = f"""Tu es un agent qui resout des taches de code.
+# The tools are no longer listed here: they come from the connected MCP server,
+# and their manual (mcp_bridge.build_manual) is passed to Agent as tools_manual
+PROMPT_SYSTEME = """Tu es un agent qui resout des taches de code.
 A chaque tour :
 1. Thought: tu expliques ce que tu vas faire.
 2. Code: tu ecris UN bloc ```python ... ``` qui sera execute. Utilise print() pour voir les resultats.
 3. Tu recois ensuite une Observation avec ce qui a ete affiche (ou l'erreur).
 Les variables sont conservees d'un tour a l'autre.
 
-Outils disponibles (deja importes) :
-{chr(10).join(f"- {nom}{inspect.signature(f)}" for nom, f in OUTILS.items())}
-
-Quand tu as la reponse finale, reponds SANS bloc ```python```, en commencant par "Final Answer:".
+Quand tu as la reponse finale, appelle final_answer(reponse) dans ton code,
+ou reponds SANS bloc ```python```, en commencant par "Final Answer:".
 """
 FOURNISSEUR = [{"nom" : "groq", "url": "https://api.groq.com/openai/v1/chat/completions", "modele": "openai/gpt-oss-120b", "key_env": "GROQ_API_KEY"},
        {"nom":"gemini", "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "modele": "gemini-3.6-flash", "key_env": "GEMINI_API_KEY"}]
@@ -56,22 +46,11 @@ def creer_client(index):
         raise ValueError(f"Clé API manquante pour {fournisseur['nom']}. Veuillez définir la variable d'environnement {nom_variable}.")
     return ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key)
 
-historique_code = ""
-
-def executer_code(code, namespace):
-    """execute le code du llm et renvoie ce qui a ete affiche (stdout + erreurs)"""
-    global historique_code
-    
-    historique_code += code + "\n"
-    
-    file = file_temp(historique_code, namespace)
-    
-    resultat = run_sandbox(file)
-
-    texte = resultat["error"] if resultat["error"] else resultat["output"]
-    
-    observation = texte or "(le code a tourne sans erreur, rien n'a ete affiche)"
-    
+def format_observation(result: ExecutionResult) -> str:
+    """What the LLM sees after its code ran: printed output, then the error if any."""
+    observation = result.output + result.error
+    if not observation.strip():
+        observation = "(the code ran without error and printed nothing)"
     return observation[:MAX_OBSERVATION]
 
 class ClientLLM:
@@ -142,11 +121,17 @@ class ClientLLM:
 
 
 class Agent:
-    def __init__(self, question, max_tours, client, prompt_systeme=PROMPT_SYSTEME):
+    def __init__(self, question, max_tours, client, sandbox: Sandbox,
+                 prompt_systeme=PROMPT_SYSTEME, tools_manual: str = ""):
+        """sandbox: created by the caller, who chooses its MCP tools.
+        tools_manual: tool documentation appended to the system prompt."""
         self.question = question
         self.max_tours = max_tours
         self.client = client
+        self.sandbox = sandbox
         self.prompt_systeme = prompt_systeme  # modifiable : MBPP a besoin d'un prompt plus court
+        if tools_manual:
+            self.prompt_systeme += "\n\n" + tools_manual
         self.succes = False  # passe a True si le llm donne une reponse finale
         self.index_fournisseur = 0  # index du fournisseur actuel dans la liste FOURNISSEUR
 
@@ -158,7 +143,6 @@ class Agent:
             {"role": "user", "content": self.question}
         ]
         steps: list[StepMetrics] = []  # une fiche par tour, pour solution.json
-        namespace = dict(OUTILS)  # garde les variables du llm d'un tour a l'autre
 
         for tour in range(1, self.max_tours + 1):
             message, code_erreur = self.client.appel_llm(memoire) # parti de thinking
@@ -182,8 +166,11 @@ class Agent:
             # "Final Answer:" est prioritaire : le llm recopie parfois du code dans son raisonnement final
             code = None if "Final Answer:" in contenu else p_mardown(contenu)  # parti code
             observation = ""
+            result = None
             if code is not None:
-                observation = executer_code(code, namespace)  # parti observe
+                # the sandbox keeps the LLM's variables from one step to the next
+                result = self.sandbox.execute(code)  # parti observe
+                observation = format_observation(result)
                 memoire.append({"role": "user", "content": f"Observation:\n{observation}"})
 
             steps.append(StepMetrics(
@@ -199,6 +186,10 @@ class Agent:
                 sandbox_output=observation,
             ))
 
+            if result is not None and result.final_answer is not None:
+                self.succes = True  # the code called final_answer()
+                return result.final_answer, steps
+
             if code is None:  # pas de code = reponse finale
                 self.succes = True
                 return contenu.split("Final Answer:")[-1].strip(), steps
@@ -209,8 +200,9 @@ if __name__ == "__main__":
     try:
         load_dotenv()
         client = creer_client(0)  # crée un client LLM pour le fournisseur à l'index 0
-        test = Agent(question="combien font 2 + 2", max_tours=6, client=client)
-        res = test.agent_algo()
+        with Sandbox() as sandbox:
+            test = Agent(question="combien font 2 + 2", max_tours=6, client=client, sandbox=sandbox)
+            res = test.agent_algo()
         print(res)
     except Exception as e:
         logging.error(f"Erreur lors de l'exécution de l'agent: {e}")
