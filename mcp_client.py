@@ -1,6 +1,47 @@
 import asyncio
+import shlex
+from contextlib import AsyncExitStack
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.client.streamable_http import streamable_http_client
+
+
+class McpClient:
+    """Client MCP qui choisit son transport selon la cible recue.
+
+    - une URL ("http://127.0.0.1:8000/mcp")  -> streamable HTTP
+    - une commande ("python3 mcp_tools_mbpp.py") -> stdio
+    """
+
+    def __init__(self, target: str):
+        self.target = target
+        self.session: ClientSession | None = None
+        self._stack: AsyncExitStack | None = None
+
+    def _open_transport(self):
+        # Seul endroit qui depend du transport : les deux renvoient (read, write)
+        if self.target.startswith(("http://", "https://")):
+            return streamable_http_client(self.target)
+        command, *args = shlex.split(self.target)
+        return stdio_client(StdioServerParameters(command=command, args=args))
+
+    async def __aenter__(self):
+        # AsyncExitStack remplace les deux `async with` imbriques :
+        # il ouvre transport puis session, et les referme dans l'ordre inverse
+        self._stack = AsyncExitStack()
+        try:
+            read, write = await self._stack.enter_async_context(self._open_transport())
+            self.session = await self._stack.enter_async_context(ClientSession(read, write))
+            await self.session.initialize()
+        except BaseException:
+            await self._stack.aclose()
+            raise
+        return self
+
+    async def __aexit__(self, *exc):
+        await self._stack.aclose()
+        self.session = None
+
 
 test_input = {
     "code": """
