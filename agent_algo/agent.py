@@ -22,6 +22,10 @@ from sandbox.sandbox import Sandbox
 
 MAX_OBSERVATION = 5000  # sert a couper les observations trop longues pour ne pas exploser le contexte
 
+# Sent when the LLM replies with neither a code block nor a final answer
+FORMAT_REMINDER = ("Your reply contained no ```python block and no final answer. "
+                   "Reply with ONE ```python block, or give your final answer.")
+
 # The tools are no longer listed here: they come from the connected MCP server,
 # and their manual (mcp_bridge.build_manual) is passed to Agent as tools_manual
 PROMPT_SYSTEME = """Tu es un agent qui resout des taches de code.
@@ -161,7 +165,8 @@ class Agent:
                     return f"Erreur critique {code_erreur} du serveur, arret de l'agent.", steps
                 return f"Erreur du serveur, arret de l'agent.", steps
             contenu = message.get("content") or ""
-            memoire.append({"role": "assistant", "content": contenu}) # je sauvegarde la reponse du llm en mémoire
+            # some APIs reject an empty assistant message, so store a placeholder
+            memoire.append({"role": "assistant", "content": contenu or "(empty reply)"}) # je sauvegarde la reponse du llm en mémoire
 
             # "Final Answer:" est prioritaire : le llm recopie parfois du code dans son raisonnement final
             code = None if "Final Answer:" in contenu else p_mardown(contenu)  # parti code
@@ -190,9 +195,14 @@ class Agent:
                 self.succes = True  # the code called final_answer()
                 return result.final_answer, steps
 
-            if code is None:  # pas de code = reponse finale
+            if "Final Answer:" in contenu:
                 self.succes = True
                 return contenu.split("Final Answer:")[-1].strip(), steps
+
+            if code is None:
+                # Neither code nor final answer (e.g. an empty reply): do not
+                # stop, remind the format. max_tours still bounds the loop
+                memoire.append({"role": "user", "content": FORMAT_REMINDER})
 
         return "nombre maximum de tours atteint", steps
 

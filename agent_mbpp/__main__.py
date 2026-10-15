@@ -3,21 +3,36 @@ import argparse
 import ast
 import json
 import os
+import shlex
+import sys
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv # type: ignore
 
 from agent_algo.agent import Agent, ClientLLM
+from mcp_bridge import build_manual, build_tools
+from mcp_client import SyncMcpClient
 from models_public import MBPPTaskInput, SolutionOutput
 from sandbox.sandbox import Sandbox
 
 MAX_TOURS = 10  # limite de la moulinette pour MBPP
 
+# Our MBPP MCP server, started over stdio with the current Python interpreter
+MBPP_SERVER = Path(__file__).resolve().parent.parent / "mcp_tools_mbpp.py"
+MBPP_SERVER_COMMAND = f"{shlex.quote(sys.executable)} {shlex.quote(str(MBPP_SERVER))}"
+
 # prompt en anglais et court : la limite MBPP est de 6000 tokens d'entree sur TOUS les tours
 PROMPT_MBPP = """You solve Python tasks.
-Each turn: "Thought:" in ONE sentence, then ONE ```python block that defines the complete function and runs the given tests (asserts).
-You then receive an Observation (stdout or error). No error means the tests passed.
-When the tests pass, reply only: Final Answer: done
+Each turn: "Thought:" in ONE sentence, then ONE ```python block like this:
+    code = '''def f(x):
+        ...'''
+    result = run_tests(code=code, test_list=tests)
+    print(result)
+    if '"success": true' in result:
+        final_answer(code)
+`tests` is already defined: it holds the task's test assertions.
+If the tests fail, read the Observation and fix the function.
 Be concise, do not repeat code."""
 
 
@@ -48,6 +63,16 @@ def extraire_solution(steps, nom_fonction: str) -> str:
     return ""
 
 
+def solution_from_answer(answer: str, steps, function_name: str) -> str:
+    """final_answer(code) gives the solution directly; otherwise search the steps."""
+    if f"def {function_name}" in answer:
+        try:
+            return nettoyer_code(answer)
+        except SyntaxError:
+            pass
+    return extraire_solution(steps, function_name)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task-file", required=True)
@@ -69,20 +94,29 @@ def main():
     client = ClientLLM(adress=url, modele=args.model_name, key=os.getenv("GEMINI_API_KEY"))
 
     erreur = None
-    # one sandbox process for the whole task: variables persist between steps
-    with Sandbox() as sandbox:
-        agent = Agent(question=construire_question(tache), max_tours=MAX_TOURS, client=client,
-                      sandbox=sandbox, prompt_systeme=PROMPT_MBPP)
-        try:
-            reponse, steps = agent.agent_algo()
-        except Exception as e:  # on ecrit quand meme solution.json pour ne pas perdre les metriques
-            reponse, steps = str(e), []
-            erreur = f"crash de l'agent : {e}"
+    reponse, steps, agent_succes = "", [], False
+    system_prompt = PROMPT_MBPP
+    try:
+        # The MBPP MCP server provides run_tests. One sandbox process for the
+        # whole task, so variables persist between steps
+        with SyncMcpClient(MBPP_SERVER_COMMAND) as mcp_client:
+            with Sandbox(tools=build_tools(mcp_client)) as sandbox:
+                # `tests` lets the LLM call run_tests without copying the asserts
+                sandbox.execute(f"tests = {tache.test_imports + tache.test_list!r}")
+                agent = Agent(question=construire_question(tache), max_tours=MAX_TOURS, client=client,
+                              sandbox=sandbox, prompt_systeme=PROMPT_MBPP,
+                              tools_manual=build_manual(mcp_client.list_tools()))
+                system_prompt = agent.prompt_systeme  # includes the tools manual
+                reponse, steps = agent.agent_algo()
+                agent_succes = agent.succes
+    except Exception as e:  # on ecrit quand meme solution.json pour ne pas perdre les metriques
+        reponse = str(e)
+        erreur = f"crash de l'agent : {e}"
 
     # nom de la fonction a partir de "def add(a, b):"
     nom_fonction = tache.function_definition.split("def ")[-1].split("(")[0].strip()
-    solution = extraire_solution(steps, nom_fonction)
-    succes = agent.succes and bool(solution)
+    solution = solution_from_answer(reponse, steps, nom_fonction)
+    succes = agent_succes and bool(solution)
     if not succes and erreur is None:
         erreur = reponse
 
@@ -97,7 +131,7 @@ def main():
         total_output_tokens=sum(s.output_tokens for s in steps),
         total_time_seconds=time.time() - debut,
         steps=steps,
-        system_prompt=PROMPT_MBPP,
+        system_prompt=system_prompt,
         error=erreur,
     )
     with open(args.output, "w") as f:

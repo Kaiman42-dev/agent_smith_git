@@ -40,9 +40,16 @@ class FinalAnswerSignal(BaseException):
         self.answer = answer
 
 
-def final_answer(answer):
-    """Submit the final answer and end the task."""
-    raise FinalAnswerSignal(str(answer))
+def final_answer(*args, **kwargs):
+    """Submit the final answer and end the task.
+
+    Takes exactly one argument, positional or keyword: LLMs write both
+    final_answer(code) and final_answer(code=code).
+    """
+    values = list(args) + list(kwargs.values())
+    if len(values) != 1:
+        raise TypeError(f"final_answer() takes exactly one argument ({len(values)} given)")
+    raise FinalAnswerSignal(str(values[0]))
 
 
 def make_tool_proxy(conn, tool_name: str, description: str | None):
