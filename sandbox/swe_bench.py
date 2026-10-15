@@ -1,4 +1,4 @@
-from standbox.Parsing import p_SWE
+from sandbox.Parsing import p_SWE
 import subprocess
 import os
 

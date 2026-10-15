@@ -11,8 +11,8 @@ import logging
 import traceback
 import contextlib
 from pathlib import Path
-from standbox.mbpp import file_temp, run_sandbox
-from standbox.config_sandbox import Conifg_Sandbox
+from sandbox.mbpp import file_temp, run_sandbox
+from sandbox.config_sandbox import Conifg_Sandbox
 
 # permet d'importer Extraction_llm et outils/ qui sont a la racine du projet
 sys.path.append(str(Path(__file__).resolve().parent.parent))
