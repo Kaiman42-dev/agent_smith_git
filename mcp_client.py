@@ -1,5 +1,6 @@
 import asyncio
 import shlex
+import sys
 from contextlib import AsyncExitStack
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -42,6 +43,24 @@ class McpClient:
         await self._stack.aclose()
         self.session = None
 
+    async def list_tools(self):
+        return (await self.session.list_tools()).tools
+
+    async def call_tool(self, name: str, arguments: dict):
+        return await self.session.call_tool(name, arguments)
+
+    async def list_resources(self):
+        return (await self.session.list_resources()).resources
+
+    async def read_resource(self, uri: str):
+        return await self.session.read_resource(uri)
+
+    async def list_prompts(self):
+        return (await self.session.list_prompts()).prompts
+
+    async def get_prompt(self, name: str, arguments: dict):
+        return await self.session.get_prompt(name, arguments)
+
 
 test_input = {
     "code": """
@@ -56,31 +75,32 @@ prompt_args = {
     "function_definition": """ def add(a,b):""",
     "test_list": """assert add(1,2) == 3 \nassert add(-1,1) == 0"""
 }
-async def main():
+async def main(target: str):
+    async with McpClient(target) as client:
+        print(f"Connected to the MCP server: {target}")
+        tools = await client.list_tools()
+        for tool in tools:
+            print(f"Tool: {tool.name}, description: {tool.description}")
+            print(f"input schema: properties: {tool.input_schema.get('properties', {})}")
+            print(f"input schema: required: {tool.input_schema.get('required', [])}")
 
-    params = StdioServerParameters(command="python3", args=["mcp_tools_mbpp.py"])
-    async with stdio_client(params) as streams: # stdio_client returns a pair of streams (reader, writer), il sert à communiquer avec le serveur mcp_tools_mbpp.py via stdio
-        print("Connected to the MCP server via stdio.")
-        async with ClientSession(streams[0], streams[1]) as session:
-            await session.initialize()
-            result = await session.list_tools()
-            for tool in result.tools:
-                print(f"Tool: {tool.name}, description: {tool.description}")
-                print(f"input schema: properties: {tool.input_schema.get('properties', {})}")
-                print(f"input schema: required: {tool.input_schema.get('required', [])}")
-    
-            reponse = await session.call_tool(str(result.tools[0].name), test_input)
-            print(f"\nresponse: {reponse}")
-            ressource_response = await session.list_resources()
-            print(f"\nlist_resources response: {ressource_response}\n")
+        reponse = await client.call_tool(tools[0].name, test_input)
+        print(f"\nresponse: {reponse}")
+        ressource_response = await client.list_resources()
+        print(f"\nlist_resources response: {ressource_response}\n")
 
-            result_read = await session.read_resource("mbpp://limits")
-            print(f"read ressource = {result_read}\n")
-        
-            list_prompt = await session.list_prompts()
-            print(f"\nlist_promp = {list_prompt}\n")
-        
-            result_prompt = await session.get_prompt(list_prompt.prompts[0].name, prompt_args)
-            print(f"\nresult_prompt = {result_prompt}")
-            
-asyncio.run(main())
+        result_read = await client.read_resource("mbpp://limits")
+        print(f"read ressource = {result_read}\n")
+
+        list_prompt = await client.list_prompts()
+        print(f"\nlist_promp = {list_prompt}\n")
+
+        result_prompt = await client.get_prompt(list_prompt[0].name, prompt_args)
+        print(f"\nresult_prompt = {result_prompt}")
+
+
+if __name__ == "__main__":
+    # python mcp_client.py                            -> stdio (par defaut)
+    # python mcp_client.py http://127.0.0.1:8000/mcp  -> HTTP
+    target = sys.argv[1] if len(sys.argv) > 1 else "python3 mcp_tools_mbpp.py"
+    asyncio.run(main(target))
