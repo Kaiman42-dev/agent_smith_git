@@ -3,6 +3,11 @@
 The parent (sandbox.py) starts this process once per task. Here we apply the
 restrictions, then loop: receive code, run it in a persistent namespace,
 send the result back.
+
+The namespace holds two kinds of functions (subject, "Architectural boundary"):
+- MCP tool proxies: they forward the call to the parent, which runs the real
+  tool outside the sandbox
+- final_answer: provided by the sandbox itself, always present
 """
 
 import builtins
@@ -12,33 +17,51 @@ import linecache
 import os
 import signal
 import traceback
-from dataclasses import dataclass
 
 from .config_sandbox import Conifg_Sandbox
+from .protocol import (ExecutionResult, ExitSignal, RunCode, ToolCall,
+                       receive_message, send_message)
 
 REMOVED_BUILTINS = ("eval", "exec", "compile", "breakpoint", "input")
 MAX_CAPTURED_OUTPUT = 50_000  # characters kept from print() output
 
 
-# ------------------------------------------------- messages sent to parent --
+# -------------------------------------------- functions given to the LLM --
 
-@dataclass
-class ExecutionResult:
-    """Outcome of one code block."""
-    success: bool
-    output: str  # everything printed (stdout + stderr)
-    error: str   # traceback if the code raised, "" otherwise
+class FinalAnswerSignal(BaseException):
+    """Raised by final_answer() to stop the code block immediately.
 
-
-@dataclass
-class ExitSignal:
-    """The code raised SystemExit or KeyboardInterrupt.
-
-    The subject requires these two to reach the agent loop, so the parent
-    re-raises them on its side.
+    It inherits from BaseException, not Exception, so that an
+    `except Exception` written by the LLM does not swallow it.
     """
-    exception_name: str  # "SystemExit" or "KeyboardInterrupt"
-    args: tuple
+
+    def __init__(self, answer: str):
+        super().__init__(answer)
+        self.answer = answer
+
+
+def final_answer(answer):
+    """Submit the final answer and end the task."""
+    raise FinalAnswerSignal(str(answer))
+
+
+def make_tool_proxy(conn, tool_name: str, description: str | None):
+    """A function that looks like the MCP tool, but only relays the call.
+
+    The real tool runs in the parent, outside the sandbox: it is not subject
+    to the sandbox restrictions or timeout.
+    """
+    def tool_proxy(**kwargs):
+        send_message(conn, ToolCall(name=tool_name, arguments=kwargs))
+        reply = receive_message(conn)
+        if reply.error is not None:
+            raise RuntimeError(reply.error)
+        return reply.value
+
+    # __qualname__ is the name shown in error messages (e.g. TypeError)
+    tool_proxy.__name__ = tool_proxy.__qualname__ = tool_name
+    tool_proxy.__doc__ = description
+    return tool_proxy
 
 
 # ------------------------------------------------------------ restrictions --
@@ -156,37 +179,57 @@ def run_code(code: str, namespace: dict, step: int) -> ExecutionResult:
 
     captured = CappedOutput()
     error = ""
+    answer = None
     with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
         try:
             exec(compile(code, filename, "exec"), namespace)
+        except FinalAnswerSignal as final:
+            answer = final.answer
         except Exception as e:
             error = format_error(e)
 
     output = captured.getvalue()
     if captured.truncated:
         output += "\n[output truncated]"
-    return ExecutionResult(success=not error, output=output, error=error)
+    return ExecutionResult(success=not error, output=output, error=error,
+                           final_answer=answer)
 
 
-def child_main(conn, config: Conifg_Sandbox):
-    """Entry point of the sandbox process."""
-    apply_process_limits(config)
+def build_namespace(conn, config: Conifg_Sandbox, tool_docs: dict) -> dict:
+    """The LLM's namespace: restricted builtins, tool proxies, final_answer."""
     namespace = {
         "__builtins__": Restrictions(config).build_builtins(),
         "__name__": "__sandbox__",
     }
+    for tool_name, description in tool_docs.items():
+        namespace[tool_name] = make_tool_proxy(conn, tool_name, description)
+    namespace["final_answer"] = final_answer  # set last: a tool cannot replace it
+    return namespace
+
+
+def child_main(conn, config: Conifg_Sandbox, tool_docs: dict):
+    """Entry point of the sandbox process.
+
+    tool_docs: {tool_name: description} of the MCP tools to expose.
+    """
+    apply_process_limits(config)
+    namespace = build_namespace(conn, config, tool_docs)
 
     step = 0
     while True:
         try:
-            code = conn.recv()
+            message = receive_message(conn)
         except EOFError:
             return  # the parent closed the pipe
+        if not isinstance(message, RunCode):
+            continue  # the parent only sends ToolReply in answer to a ToolCall
 
         step += 1
         try:
-            result = run_code(code, namespace, step)
+            result = run_code(message.code, namespace, step)
         except (SystemExit, KeyboardInterrupt) as e:
-            conn.send(ExitSignal(type(e).__name__, e.args))
+            # exit(code) arguments must survive JSON: keep int/str, repr the rest
+            args = [arg if isinstance(arg, (int, str)) else repr(arg) for arg in e.args]
+            send_message(conn, ExitSignal(type(e).__name__, args))
             return
-        conn.send(result)
+        send_message(conn, result)
