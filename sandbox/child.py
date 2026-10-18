@@ -19,7 +19,7 @@ import os
 import signal
 import traceback
 
-from .config_sandbox import Conifg_Sandbox
+from .config import SandboxConfig
 from .protocol import (ExecutionResult, ExitSignal, RunCode, ToolCall,
                        receive_message, send_message)
 
@@ -77,7 +77,7 @@ def make_tool_proxy(conn, tool_name: str, description: str | None):
 class Restrictions:
     """The sandbox rules (imports, files), built from the config."""
 
-    def __init__(self, config: Conifg_Sandbox):
+    def __init__(self, config: SandboxConfig):
         self.allowed_imports = set(config.authorized_imports)
         # realpath resolves "..", symlinks, and /tmp -> /private/tmp on macOS
         self.allowed_dirs = [os.path.realpath(d) for d in config.allowed_directories]
@@ -129,7 +129,7 @@ class Restrictions:
         return restricted
 
 
-def apply_process_limits(config: Conifg_Sandbox):
+def apply_process_limits(config: SandboxConfig):
     """Limits that apply to the whole process: Ctrl+C, memory, network."""
     # Ctrl+C is handled by the parent, which then kills this process
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -213,7 +213,7 @@ def run_code(code: str, namespace: dict, step: int, interactive: bool = False) -
                            final_answer=answer)
 
 
-def build_namespace(conn, config: Conifg_Sandbox, tool_docs: dict) -> dict:
+def build_namespace(conn, config: SandboxConfig, tool_docs: dict) -> dict:
     """The LLM's namespace: restricted builtins, tool proxies, final_answer."""
     namespace = {
         "__builtins__": Restrictions(config).build_builtins(),
@@ -225,7 +225,7 @@ def build_namespace(conn, config: Conifg_Sandbox, tool_docs: dict) -> dict:
     return namespace
 
 
-def child_main(conn, config: Conifg_Sandbox, tool_docs: dict):
+def child_main(conn, config: SandboxConfig, tool_docs: dict):
     """Entry point of the sandbox process.
 
     tool_docs: {tool_name: description} of the MCP tools to expose.

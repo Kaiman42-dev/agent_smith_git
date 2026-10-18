@@ -18,7 +18,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from Extraction_llm import p_mardown
 from models_public import StepMetrics
 from sandbox.protocol import ExecutionResult
-from sandbox.sandbox import Sandbox
+from sandbox.parent import Sandbox
 
 MAX_OBSERVATION = 5000  # sert a couper les observations trop longues pour ne pas exploser le contexte
 

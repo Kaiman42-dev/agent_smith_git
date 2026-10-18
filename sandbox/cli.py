@@ -18,8 +18,8 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from .config_sandbox import Conifg_Sandbox
-from .sandbox import Sandbox
+from .config import SandboxConfig
+from .parent import Sandbox
 
 EXIT_COMMANDS = ("exit", "quit")
 
@@ -37,11 +37,11 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def load_config(path: str | None) -> Conifg_Sandbox:
+def load_config(path: str | None) -> SandboxConfig:
     if path is None:
-        return Conifg_Sandbox()
+        return SandboxConfig()
     try:
-        return Conifg_Sandbox.model_validate_json(Path(path).read_text())
+        return SandboxConfig.model_validate_json(Path(path).read_text())
     except OSError as e:
         sys.exit(f"sandbox: cannot read {path}: {e.strerror}")
     except ValidationError as e:

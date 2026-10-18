@@ -18,7 +18,7 @@ import multiprocessing
 import time
 
 from .child import child_main
-from .config_sandbox import Conifg_Sandbox
+from .config import SandboxConfig
 from .protocol import (ExecutionResult, ExitSignal, ProtocolError, RunCode,
                        ToolCall, ToolReply, receive_message, send_message)
 
@@ -36,9 +36,9 @@ class _ChildTimeout(Exception):
 class Sandbox:
     """Controls the child process: start, execute, timeout, stop."""
 
-    def __init__(self, config: Conifg_Sandbox | None = None, tools: dict | None = None):
+    def __init__(self, config: SandboxConfig | None = None, tools: dict | None = None):
         """tools: {tool_name: function}, run in the parent when the code calls them."""
-        self.config = config or Conifg_Sandbox()
+        self.config = config or SandboxConfig()
         self.tools = tools or {}
         self._process = None
         self._conn = None

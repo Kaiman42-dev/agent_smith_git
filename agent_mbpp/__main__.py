@@ -14,7 +14,7 @@ from agent_algo.agent import Agent, ClientLLM
 from mcp_bridge import build_manual, build_tools
 from mcp_client import SyncMcpClient
 from models_public import MBPPTaskInput, SolutionOutput
-from sandbox.sandbox import Sandbox
+from sandbox.parent import Sandbox
 
 MAX_TOURS = 10  # limite de la moulinette pour MBPP
 

@@ -15,7 +15,7 @@ from agent_algo.agent import Agent, ClientLLM
 from mcp_bridge import build_manual, build_tools
 from mcp_client import SyncMcpClient
 from models_public import SWEBenchTaskInput, SolutionOutput
-from sandbox.sandbox import Sandbox
+from sandbox.parent import Sandbox
 
 MAX_TOURS = 30  # limite de la moulinette pour SWE-bench[cite: 27]
 

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List
 
-class Conifg_Sandbox(BaseModel):
+class SandboxConfig(BaseModel):
     
     max_execution_time_seconds: int = 30
     
