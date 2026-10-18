@@ -3,30 +3,24 @@ import subprocess
 import os
 
 
-def image_SWE():
-	"""
-	cls = p_SWE("Json/task.json")
-	image = cls.docker_image
-	print(image)
-	"""
-	image = "swebench/sweb.eval.x86_64.sympy_1776_sympy-23534:latest"
-	try:
-		subprocess.run( # telecharge image docker
-			["docker", "pull", image],
-			capture_output=True,
-			text=True,
-			check=True
-			)
-		result = subprocess.run( # run docker
-			["docker", "run", "-d", image, "tail", "-f", "/dev/null"],
-			capture_output=True,
-			text=True,
-			check=True
-			)
-		id_conteneur = result.stdout.strip()
-		return id_conteneur
-	except:
-		return "Error"
+import json
+import os
+
+def image_SWE(chemin_task_json: str) -> str:
+    if not os.path.exists(chemin_task_json):
+        raise FileNotFoundError(f"Le fichier de tâche est introuvable : {chemin_task_json}")
+        
+    try:
+        with open(chemin_task_json, "r") as f:
+            data = json.load(f)
+            
+        image_name = data.get("dockerhub_image_name")
+        if not image_name:
+            raise ValueError("Clé 'dockerhub_image_name' manquante dans le JSON.")
+            
+        return image_name
+    except Exception as e:
+        raise RuntimeError(f"Erreur lors de la lecture de l'image SWE-bench : {e}")
 
 
 def run_in_docker(outils, workdir="/testbed"):
