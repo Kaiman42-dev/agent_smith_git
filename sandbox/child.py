@@ -10,6 +10,7 @@ The namespace holds two kinds of functions (subject, "Architectural boundary"):
 - final_answer: provided by the sandbox itself, always present
 """
 
+import ast
 import builtins
 import contextlib
 import io
@@ -178,7 +179,7 @@ def format_error(error: Exception) -> str:
     return "".join(traceback.format_exception(type(error), error, llm_frames))
 
 
-def run_code(code: str, namespace: dict, step: int) -> ExecutionResult:
+def run_code(code: str, namespace: dict, step: int, interactive: bool = False) -> ExecutionResult:
     # A unique "file name" registered in linecache lets the traceback
     # display the LLM's source lines
     filename = f"<sandbox-step-{step}>"
@@ -189,7 +190,17 @@ def run_code(code: str, namespace: dict, step: int) -> ExecutionResult:
     answer = None
     with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
         try:
-            exec(compile(code, filename, "exec"), namespace)
+            # compile() rather than ast.parse(): no extra frame in the traceback
+            tree = compile(code, filename, "exec", ast.PyCF_ONLY_AST)
+            last_expression = None
+            if interactive and tree.body and isinstance(tree.body[-1], ast.Expr):
+                # Like the Python REPL: the value of the last expression is printed
+                last_expression = ast.Expression(tree.body.pop().value)
+            exec(compile(tree, filename, "exec"), namespace)
+            if last_expression is not None:
+                value = eval(compile(last_expression, filename, "eval"), namespace)
+                if value is not None:
+                    print(repr(value))
         except FinalAnswerSignal as final:
             answer = final.answer
         except Exception as e:
@@ -233,7 +244,7 @@ def child_main(conn, config: Conifg_Sandbox, tool_docs: dict):
 
         step += 1
         try:
-            result = run_code(message.code, namespace, step)
+            result = run_code(message.code, namespace, step, message.interactive)
         except (SystemExit, KeyboardInterrupt) as e:
             # exit(code) arguments must survive JSON: keep int/str, repr the rest
             args = [arg if isinstance(arg, (int, str)) else repr(arg) for arg in e.args]

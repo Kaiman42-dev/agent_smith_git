@@ -78,11 +78,23 @@ class Sandbox:
 
     # ------------------------------------------------------------ execution --
 
-    def execute(self, code: str) -> ExecutionResult:
-        """Run `code` in the persistent namespace."""
+    def execute(self, code: str, interactive: bool = False) -> ExecutionResult:
+        """Run `code` in the persistent namespace.
+
+        interactive: also print the value of the last expression (REPL).
+        """
         if self._process is None:
             self.start()
-        send_message(self._conn, RunCode(code))
+        try:
+            return self._run(code, interactive)
+        except (SystemExit, KeyboardInterrupt):
+            # exit() in the code, or Ctrl+C while the child may still be busy:
+            # stop it, the next execute() starts a fresh one
+            self.close()
+            raise
+
+    def _run(self, code: str, interactive: bool) -> ExecutionResult:
+        send_message(self._conn, RunCode(code, interactive))
 
         # Only the time spent running the LLM's code counts, not tool calls
         time_left = self.config.max_execution_time_seconds
@@ -100,7 +112,6 @@ class Sandbox:
             if isinstance(message, ToolCall):
                 send_message(self._conn, self._call_tool(message))
             elif isinstance(message, ExitSignal):
-                self.restart()
                 raise _EXIT_EXCEPTIONS[message.exception_name](*message.args)
             elif isinstance(message, ExecutionResult):
                 return message

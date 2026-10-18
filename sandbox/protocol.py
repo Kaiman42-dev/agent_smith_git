@@ -26,6 +26,7 @@ class ProtocolError(Exception):
 class RunCode:
     """Parent asks the child to run a code block."""
     code: str
+    interactive: bool = False  # REPL: also print the value of the last expression
 
 
 @dataclass
