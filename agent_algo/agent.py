@@ -75,7 +75,13 @@ class ClientLLM:
             {"model": self.modele, "messages": messages, "stream": False }
         ).encode()
         requete = urllib.request.Request(
-            self.adress, data=corps, headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"} # c'est ce qui est envoyé a l'API, avec la clé
+            self.adress, data=corps,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.key}",  # c'est ce qui est envoyé a l'API, avec la clé
+                # Cloudflare (devant Groq) refuse l'identifiant par défaut "Python-urllib" : erreur 403
+                "User-Agent": "agent-smith/0.1",
+            },
         )
         i = 0
         while i <= 5:
