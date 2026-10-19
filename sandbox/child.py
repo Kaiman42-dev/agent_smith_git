@@ -23,17 +23,103 @@ import linecache
 import os
 import signal
 import traceback
+import types
 
 from .config import SandboxConfig
 from .protocol import (ExecutionResult, ExitSignal, RunCode, ToolCall,
                        receive_message, send_message)
 
-# Builtins retirés car ils permettent d'exécuter du code arbitraire ou d'ouvrir un shell
-REMOVED_BUILTINS = ("eval", "exec", "compile", "breakpoint", "input")
+# Builtins retirés : eval/exec/compile exécutent du code arbitraire, breakpoint/input
+# ouvrent une console, et vars(obj) renvoie obj.__dict__ sans passer par is_attr_allowed
+REMOVED_BUILTINS = ("eval", "exec", "compile", "breakpoint", "input", "vars")
 MAX_CAPTURED_OUTPUT = 50_000  # nombre de caractères gardés de la sortie print()
 
+# Attributs commençant par "_" que le LLM a quand même le droit d'utiliser.
+# Tous les autres "_xxx" sont bloqués : c'est par eux qu'on remonte jusqu'à os
+# (final_answer.__globals__, random._os, ().__class__.__subclasses__()...).
+ALLOWED_UNDERSCORE_ATTRS = frozenset({
+    "__init__", "__name__", "__doc__",            # super().__init__(), f.__name__
+    "__len__", "__iter__", "__next__", "__contains__",
+    "__getitem__", "__setitem__", "__str__", "__repr__",
+    "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__", "__hash__",
+    "__add__", "__sub__", "__mul__",
+})
 
-# -------------------------------------------- fonctions données au LLM --
+# Attributs de frames et de générateurs : ils ne commencent pas par "_",
+# mais mènent aux variables globales du code qui appelle (donc à child.py).
+FRAME_ATTRS = frozenset({
+    "gi_frame", "gi_code", "cr_frame", "cr_code", "ag_frame", "ag_code",
+    "f_back", "f_globals", "f_locals", "f_builtins", "f_code",
+    "tb_frame", "tb_next",
+})
+
+# Fonctions de modules autorisés retirées des copies données au LLM : elles lisent
+# un attribut à partir d'une chaîne (comme getattr) ou évaluent du texte.
+REMOVED_MODULE_ATTRS = {
+    "operator": {"attrgetter", "methodcaller"},
+    "string": {"Formatter"},
+    "typing": {"get_type_hints"},
+}
+
+
+def is_attr_allowed(name: str) -> bool:
+    """La règle unique, utilisée par l'analyse du code ET par getattr."""
+    if name in FRAME_ATTRS:
+        return False
+    if name.startswith("_"):
+        return name in ALLOWED_UNDERSCORE_ATTRS  # "_xxx" : seulement la liste blanche
+    return True  # attribut normal (append, keys, sqrt...)
+
+
+def check_attr_name(name):
+    """Applique is_attr_allowed à un nom d'attribut reçu sous forme de chaîne."""
+    # type(...) is str, et pas isinstance : une sous-classe de str écrite par le LLM
+    # pourrait redéfinir startswith() pour tromper is_attr_allowed.
+    if type(name) is not str:
+        raise TypeError("attribute name must be a plain string")
+    if not is_attr_allowed(name):
+        raise PermissionError(f"access to attribute '{name}' is blocked by the sandbox")
+
+
+def safe_getattr(obj, name, *default):
+    check_attr_name(name)
+    return getattr(obj, name, *default)
+
+
+def safe_setattr(obj, name, value):
+    check_attr_name(name)
+    setattr(obj, name, value)
+
+
+def safe_delattr(obj, name):
+    check_attr_name(name)
+    delattr(obj, name)
+
+
+def make_safe_module(module, restrictions, copies=None) -> types.ModuleType:
+    """Copie filtrée d'un module autorisé : c'est elle que le LLM reçoit, pas le vrai.
+
+    On ne garde que les noms publics, et les sous-modules eux-mêmes autorisés
+    (copiés à leur tour). Les vrais modules restent intacts : la sandbox et les
+    autres modules continuent de s'en servir normalement.
+    """
+    if copies is None:
+        copies = {}
+    if module.__name__ in copies:   # deux modules peuvent se citer l'un l'autre : on évite de boucler
+        return copies[module.__name__]
+    safe = types.ModuleType(module.__name__, module.__doc__)
+    copies[module.__name__] = safe
+    removed = REMOVED_MODULE_ATTRS.get(module.__name__, set())
+    for name, value in vars(module).items():
+        if name.startswith("_") or name in removed:
+            continue  # noms internes (random._os...) et fonctions retirées
+        if isinstance(value, types.ModuleType):
+            if not restrictions.is_import_allowed(value.__name__):
+                continue  # module non autorisé rangé dans un module autorisé (typing.sys...)
+            value = make_safe_module(value, restrictions, copies)
+        setattr(safe, name, value)
+    return safe
+
 
 class FinalAnswerSignal(BaseException):
     """Levée par final_answer() pour arrêter le bloc de code immédiatement.
@@ -78,9 +164,6 @@ def make_tool_proxy(conn, tool_name: str, description: str | None):
     tool_proxy.__doc__ = description
     return tool_proxy
 
-
-# ------------------------------------------------------------ restrictions --
-
 class Restrictions:
     """Les règles de la sandbox (imports, fichiers), construites depuis la config."""
 
@@ -113,7 +196,8 @@ class Restrictions:
             raise ImportError("Relative imports are blocked by the sandbox")
         if not self.is_import_allowed(name):
             raise ImportError(f"Import blocked by the sandbox: {name}")
-        return builtins.__import__(name, globals, locals, fromlist, level)
+        module = builtins.__import__(name, globals, locals, fromlist, level)
+        return make_safe_module(module, self)
 
     def safe_open(self, file, *args, **kwargs):
         # Remplace open() : on n'autorise que les dossiers de la liste blanche
@@ -137,6 +221,9 @@ class Restrictions:
             restricted.pop(name, None)
         restricted["__import__"] = self.safe_import
         restricted["open"] = self.safe_open
+        restricted["getattr"] = safe_getattr
+        restricted["setattr"] = safe_setattr
+        restricted["delattr"] = safe_delattr
         return restricted
 
 
@@ -162,8 +249,6 @@ def apply_process_limits(config: SandboxConfig):
     socket.socket = blocked_socket
     socket.create_connection = blocked_socket
 
-
-# --------------------------------------------------------------- exécution --
 
 class CappedOutput(io.StringIO):
     """Un StringIO qui arrête de stocker le texte après MAX_CAPTURED_OUTPUT.
@@ -192,6 +277,26 @@ def format_error(error: Exception) -> str:
     return "".join(traceback.format_exception(type(error), error, llm_frames))
 
 
+def check_code(tree: ast.AST) -> str | None:
+    """Cherche un attribut interdit dans le code, AVANT de l'exécuter.
+
+    Renvoie le message d'erreur pour le LLM, ou None si le code est accepté.
+    Ne voit que les noms écrits en clair (obj.__globals__) : un nom caché dans
+    une chaîne (getattr(obj, "__glo" + "bals__")) est géré par safe_getattr.
+    """
+    for node in ast.walk(tree):  # visite tous les nœuds de l'arbre, à toute profondeur
+        if isinstance(node, ast.Attribute):
+            names = [node.attr]          # obj.xxx, en lecture comme en écriture
+        elif isinstance(node, ast.MatchClass):
+            names = node.kwd_attrs       # case Foo(xxx=...) lit aussi l'attribut obj.xxx
+        else:
+            continue
+        for name in names:
+            if not is_attr_allowed(name):
+                return f"line {node.lineno}: access to attribute '{name}' is blocked by the sandbox"
+    return None
+
+
 def run_code(code: str, namespace: dict, step: int, interactive: bool = False) -> ExecutionResult:
     # Un "nom de fichier" unique enregistré dans linecache permet à la traceback
     # d'afficher les lignes de code du LLM (sinon elles n'existent nulle part sur disque).
@@ -207,6 +312,9 @@ def run_code(code: str, namespace: dict, step: int, interactive: bool = False) -
         try:
             # compile() plutôt qu'ast.parse() : évite une frame en plus dans la traceback
             tree = compile(code, filename, "exec", ast.PyCF_ONLY_AST)
+            problem = check_code(tree)
+            if problem is not None:
+                raise PermissionError(problem)  # rien n'a été exécuté
             last_expression = None
             if interactive and tree.body and isinstance(tree.body[-1], ast.Expr):
                 # Mode REPL : on détache la dernière expression pour afficher sa valeur,
