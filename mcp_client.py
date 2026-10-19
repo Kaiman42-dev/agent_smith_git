@@ -110,9 +110,17 @@ class SyncMcpClient:
         self._main = asyncio.run_coroutine_threadsafe(self._keep_open(ready), self._loop)
         try:
             ready.result()
-        except BaseException:
+        except BaseException as e:
             self._stop_loop()
-            raise
+            if not isinstance(e, Exception):
+                raise
+            # The mcp library wraps the real error in an ExceptionGroup
+            # ("unhandled errors in a TaskGroup"): keep the one that explains
+            cause = e
+            while getattr(cause, "exceptions", None):
+                cause = cause.exceptions[0]
+            raise ConnectionError(f"cannot connect to the MCP server {self.target!r}: "
+                                  f"{type(cause).__name__}: {cause}") from e
         return self
 
     def __exit__(self, *exc):
