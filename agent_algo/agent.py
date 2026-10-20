@@ -39,8 +39,15 @@ Les variables sont conservees d'un tour a l'autre.
 Quand tu as la reponse finale, appelle final_answer(reponse) dans ton code,
 ou reponds SANS bloc ```python```, en commencant par "Final Answer:".
 """
-FOURNISSEUR = [{"nom" : "groq", "url": "https://api.groq.com/openai/v1/chat/completions", "modele": "openai/gpt-oss-120b", "key_env": "GROQ_API_KEY"},
-       {"nom":"gemini", "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "modele": "gemini-3.6-flash", "key_env": "GEMINI_API_KEY"}]
+# Fournisseurs de secours, essayés dans cet ordre si le fournisseur choisi ne répond plus
+FOURNISSEUR = [
+    {"nom": "groq", "url": "https://api.groq.com/openai/v1/chat/completions",
+     "modele": "openai/gpt-oss-120b", "key_env": "GROQ_API_KEY"},
+    {"nom": "openrouter", "url": "https://openrouter.ai/api/v1/chat/completions",
+     "modele": "poolside/laguna-s-2.1:free", "key_env": "OPENROUTER_API_KEY"},
+    {"nom": "gemini", "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+     "modele": "gemini-3.6-flash", "key_env": "GEMINI_API_KEY"},
+]
 
 def creer_client(index):
     """créé un nv client LLM à partir de l'index dans la liste LLM"""
@@ -80,6 +87,23 @@ def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None = N
     if not api_key:
         raise ValueError(f"Clé API manquante : la variable d'environnement {api_key_env} n'est pas définie")
     return ClientLLM(adress=url, modele=modele, key=api_key)
+
+
+def creer_clients_secours(principal: "ClientLLM") -> list["ClientLLM"]:
+    """Les clients de secours, dans l'ordre de FOURNISSEUR.
+
+    On saute le fournisseur du client principal (s'il est en panne, ses autres modèles
+    aussi, en général) et ceux dont la clé manque : on les ignore ici, au lieu de
+    planter au moment de basculer.
+    """
+    secours = []
+    for fournisseur in FOURNISSEUR:
+        if fournisseur["url"] == principal.adress:
+            continue
+        api_key = os.getenv(fournisseur["key_env"])
+        if api_key:
+            secours.append(ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key))
+    return secours
 
 def format_observation(result: ExecutionResult) -> str:
     """What the LLM sees after its code ran: printed output, then the error if any."""
@@ -163,9 +187,11 @@ class ClientLLM:
 
 class Agent:
     def __init__(self, question, max_tours, client, sandbox: Sandbox,
-                 prompt_systeme=PROMPT_SYSTEME, tools_manual: str = ""):
+                 prompt_systeme=PROMPT_SYSTEME, tools_manual: str = "",
+                 secours: list | None = None):
         """sandbox: created by the caller, who chooses its MCP tools.
-        tools_manual: tool documentation appended to the system prompt."""
+        tools_manual: tool documentation appended to the system prompt.
+        secours: clients LLM de secours, essayés dans l'ordre si le client actuel ne répond plus."""
         self.question = question
         self.max_tours = max_tours
         self.client = client
@@ -174,7 +200,23 @@ class Agent:
         if tools_manual:
             self.prompt_systeme += "\n\n" + tools_manual
         self.succes = False  # passe a True si le llm donne une reponse finale
-        self.index_fournisseur = 0  # index du fournisseur actuel dans la liste FOURNISSEUR
+        self.secours = list(secours or [])  # copie : on la vide au fur et à mesure des bascules
+
+
+    def appeler_llm(self, memoire):
+        """Appelle le LLM ; si le fournisseur ne répond plus, bascule sur le client de secours suivant.
+
+        Renvoie (message, None), ou (None, code_erreur) quand plus aucun fournisseur ne répond.
+        """
+        while True:
+            message, code_erreur = self.client.appel_llm(memoire)
+            if message is not None:
+                return message, None
+            # 400/404 : notre requête est fausse (modèle inconnu...), changer de fournisseur n'y changera rien
+            if code_erreur in (400, 404) or not self.secours:
+                return None, code_erreur
+            ancien, self.client = self.client, self.secours.pop(0)
+            logging.warning(f"{ancien.modele} indisponible (code {code_erreur}), bascule sur {self.client.modele}")
 
 
     def agent_algo(self) -> tuple[str, list[StepMetrics]]:
@@ -186,21 +228,9 @@ class Agent:
         steps: list[StepMetrics] = []  # une fiche par tour, pour solution.json
 
         for tour in range(1, self.max_tours + 1):
-            message, code_erreur = self.client.appel_llm(memoire) # parti de thinking
-            if message is None:  # si le llm ne repond pas on sort de la boucle
-                if code_erreur == 429:
-                    self.index_fournisseur += 1
-                    if self.index_fournisseur >= len(FOURNISSEUR):
-                        return f"Plus de fournisseurs disponibles, arret de l'agent.", steps
-                    client = FOURNISSEUR[self.index_fournisseur]  # on change de fournisseur si trop de requetes
-                    self.client = creer_client(self.index_fournisseur)
-                    memoire.append({"role": "user", "content": f"Erreur 429 du serveur {client['nom']}, je change de fournisseur et reessaye."})
-                    continue
-                if code_erreur is None:
-                    return f"Erreur du serveur, arret de l'agent.", steps
-                if code_erreur in (400, 404):
-                    return f"Erreur critique {code_erreur} du serveur, arret de l'agent.", steps
-                return f"Erreur du serveur, arret de l'agent.", steps
+            message, code_erreur = self.appeler_llm(memoire) # parti de thinking
+            if message is None:  # plus aucun fournisseur ne repond : on arrete
+                return f"Le LLM ne répond plus (dernier code : {code_erreur}), arret de l'agent.", steps
             contenu = message.get("content") or ""
             # some APIs reject an empty assistant message, so store a placeholder
             memoire.append({"role": "assistant", "content": contenu or "(empty reply)"}) # je sauvegarde la reponse du llm en mémoire

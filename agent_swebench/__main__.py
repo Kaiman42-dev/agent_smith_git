@@ -11,7 +11,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv # type: ignore
 
-from agent_algo.agent import Agent, creer_client_cli
+from agent_algo.agent import Agent, creer_client_cli, creer_clients_secours
 from mcp_bridge import build_manual, build_tools
 from mcp_client import SyncMcpClient
 from models_public import SWEBenchTaskInput, SolutionOutput
@@ -69,6 +69,8 @@ def main():
     parser.add_argument("--provider-url", default="https://generativelanguage.googleapis.com/v1beta/openai")
     parser.add_argument("--api-key-env", default=None,
                         help="variable d'environnement de la clé (par défaut : déduite de --provider-url)")
+    parser.add_argument("--no-fallback", action="store_true",
+                        help="ne jamais changer de fournisseur (benchmark : un seul modèle par run)")
     args = parser.parse_args()
 
     debut = time.time()
@@ -81,6 +83,7 @@ def main():
         client = creer_client_cli(args.provider_url, args.model_name, args.api_key_env)
     except ValueError as e:
         sys.exit(f"Erreur de configuration : {e}")
+    secours = [] if args.no_fallback else creer_clients_secours(client)
 
     erreur = None
     reponse, steps, agent_succes = "", [], False
@@ -110,7 +113,7 @@ def main():
 
                 agent = Agent(question=question, max_tours=MAX_TOURS, client=client,
                               sandbox=sandbox, prompt_systeme=PROMPT_SWEBENCH,
-                              tools_manual=build_manual(mcp_client.list_tools()))
+                              tools_manual=build_manual(mcp_client.list_tools()), secours=secours)
                 
                 system_prompt = agent.prompt_systeme
                 reponse, steps = agent.agent_algo()
@@ -142,7 +145,7 @@ def main():
         success=succes,
         solution=patch,
         iterations=len(steps),
-        total_requests=client.total_requetes,
+        total_requests=client.total_requetes + sum(c.total_requetes for c in secours),
         total_input_tokens=sum(s.input_tokens for s in steps),
         total_output_tokens=sum(s.output_tokens for s in steps),
         total_time_seconds=time.time() - debut,
