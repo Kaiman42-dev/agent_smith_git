@@ -48,7 +48,7 @@ class Sandbox:
         self._process = None   # le processus enfant (None tant qu'il n'est pas démarré)
         self._conn = None      # notre bout du Pipe pour lui parler
 
-    # ------------------------------------------------------------ cycle de vie --
+    # cycle de vie
 
     def start(self):
         # On n'envoie à l'enfant que les NOMS et les descriptions des outils :
@@ -85,7 +85,7 @@ class Sandbox:
     def __exit__(self, *exc):
         self.close()
 
-    # ------------------------------------------------------------ exécution --
+    # exécution
 
     def execute(self, code: str, interactive: bool = False) -> ExecutionResult:
         """Exécute `code` dans le namespace persistant.

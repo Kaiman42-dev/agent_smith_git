@@ -81,13 +81,12 @@ def main():
     parser.add_argument("--provider-url", default="https://generativelanguage.googleapis.com/v1beta/openai")
     args = parser.parse_args()
 
-    debut = time.time()
+    debut = time.time() # pour mesurer le temps total de l'agent
     load_dotenv()
 
     with open(args.task_file) as f:
         tache = MBPPTaskInput.model_validate(json.load(f))
 
-    # --provider-url est l'url de base, ClientLLM veut l'url complete
     url = args.provider_url.rstrip("/")
     if not url.endswith("/chat/completions"):
         url += "/chat/completions"
@@ -99,8 +98,8 @@ def main():
     try:
         # The MBPP MCP server provides run_tests. One sandbox process for the
         # whole task, so variables persist between steps
-        with SyncMcpClient(MBPP_SERVER_COMMAND) as mcp_client:
-            with Sandbox(tools=build_tools(mcp_client)) as sandbox:
+        with SyncMcpClient(MBPP_SERVER_COMMAND) as mcp_client: # demarre le serveur MBPP
+            with Sandbox(tools=build_tools(mcp_client)) as sandbox: 
                 # `tests` lets the LLM call run_tests without copying the asserts
                 sandbox.execute(f"tests = {tache.test_imports + tache.test_list!r}")
                 agent = Agent(question=construire_question(tache), max_tours=MAX_TOURS, client=client,
