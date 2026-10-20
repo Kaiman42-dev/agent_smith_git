@@ -1,4 +1,5 @@
 import json
+import re
 import time
 import urllib.request
 import urllib.error
@@ -22,6 +23,10 @@ from sandbox.protocol import ExecutionResult
 from sandbox.parent import Sandbox
 
 MAX_OBSERVATION = 5000  # sert a couper les observations trop longues pour ne pas exploser le contexte
+
+# Added to the next observation when the LLM's reply had to be cut
+CUT_NOTE = ("\n(Note: your reply was cut at 'Observation:'. Observations come "
+            "from the sandbox: never write them yourself.)")
 
 # Sent when the LLM replies with neither a code block nor a final answer
 FORMAT_REMINDER = ("Your reply contained no ```python block and no final answer. "
@@ -104,6 +109,15 @@ def creer_clients_secours(principal: "ClientLLM") -> list["ClientLLM"]:
         if api_key:
             secours.append(ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key))
     return secours
+
+def couper_observation_inventee(texte: str) -> str:
+    """Coupe la réponse du LLM là où il commence à inventer le résultat de son code (sujet, V.6).
+
+    On ne passe pas par le paramètre "stop" de l'API : chez les modèles raisonneurs,
+    il coupe aussi leur réflexion cachée dès qu'elle cite "Observation:", et la
+    réponse arrive vide.
+    """
+    return re.split(r"^Observation:", texte, maxsplit=1, flags=re.MULTILINE)[0]
 
 def format_observation(result: ExecutionResult) -> str:
     """What the LLM sees after its code ran: printed output, then the error if any."""
@@ -232,7 +246,8 @@ class Agent:
             message, code_erreur = self.appeler_llm(memoire) # parti de thinking
             if message is None:  # plus aucun fournisseur ne repond : on arrete
                 return f"Le LLM ne répond plus (dernier code : {code_erreur}), arret de l'agent.", steps
-            contenu = message.get("content") or ""
+            brut = message.get("content") or ""
+            contenu = couper_observation_inventee(brut)  # on garde seulement ce qui précède l'observation inventée
             # some APIs reject an empty assistant message, so store a placeholder
             memoire.append({"role": "assistant", "content": contenu or "(empty reply)"}) # je sauvegarde la reponse du llm en mémoire
 
@@ -244,7 +259,8 @@ class Agent:
                 # the sandbox keeps the LLM's variables from one step to the next
                 result = self.sandbox.execute(code)  # parti observe
                 observation = format_observation(result)
-                memoire.append({"role": "user", "content": f"Observation:\n{observation}"})
+                note = CUT_NOTE if contenu != brut else ""  # le LLM ne doit jamais deviner pourquoi
+                memoire.append({"role": "user", "content": f"Observation:\n{observation}{note}"})
 
             steps.append(StepMetrics(
                 step=tour,
@@ -254,7 +270,7 @@ class Agent:
                 retries=self.client.retries,
                 api_url=self.client.adress,
                 model_name=self.client.modele,
-                llm_output=contenu,
+                llm_output=brut,  # le sujet veut la sortie brute du LLM
                 sandbox_input=code or "",
                 sandbox_output=observation,
             ))
