@@ -22,6 +22,7 @@ import io
 import linecache
 import os
 import signal
+import sys
 import traceback
 import types
 
@@ -237,8 +238,10 @@ def apply_process_limits(config: SandboxConfig):
         max_bytes = config.max_memory_mb * 1024 * 1024
         # RLIMIT_AS limite la mémoire virtuelle que le processus peut réserver
         resource.setrlimit(resource.RLIMIT_AS, (max_bytes, max_bytes))
-    except (ImportError, ValueError, OSError):
-        pass  # RLIMIT_AS n'a aucun effet sur macOS ; il fonctionne sur Linux
+    except (ImportError, ValueError, OSError) as e:
+        # Marche sur Linux (la cible). macOS refuse RLIMIT_AS (ValueError) : on le
+        # signale au lieu de l'ignorer, sinon on croit à tort que la limite est active.
+        print(f"[sandbox] warning: memory limit not applied ({e})", file=sys.stderr)
 
     import socket
 
