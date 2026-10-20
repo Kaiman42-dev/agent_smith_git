@@ -153,12 +153,13 @@ class ClientLLM:
                 return reponse["choices"][0]["message"], None # retourne la reponse du serveur
             except urllib.error.HTTPError as e:
                 logging.error(f"Echec HTTP. Code {e.code}, Raison {e.reason}")
-                # je distingue les erreurs 400 et 404 pour ne pas réessayer inutilement (erreures de requete ou ressource non trouvée)
                 if e.code == 429:
-                    logging.error(f"Trop de requetes {e.code}. Attente avant de reessayer...")
+                    logging.error("Trop de requetes (429) : on passe au fournisseur suivant.")
                     return None, e.code
-                if e.code in(400, 404):
-                    logging.error(f"Erreur critique {e.code}, arret de l'agent.")
+                # Erreurs définitives, réessayer ne changera rien :
+                # 400/404 = requête fausse (modèle inconnu...), 401/403 = clé refusée ou accès interdit
+                if e.code in (400, 401, 403, 404):
+                    logging.error(f"Erreur definitive {e.code}, inutile de reessayer.")
                     return None, e.code
                 attente = e.headers.get("Retry-After") if e.headers else None  # le serveur peut dire combien attendre
                 i = i + 1
