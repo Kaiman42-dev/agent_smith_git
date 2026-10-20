@@ -2,6 +2,7 @@ import json
 import time
 import urllib.request
 import urllib.error
+import urllib.parse
 from dotenv import load_dotenv # type: ignore
 import os
 import sys
@@ -49,6 +50,36 @@ def creer_client(index):
     if not api_key:
         raise ValueError(f"Clé API manquante pour {fournisseur['nom']}. Veuillez définir la variable d'environnement {nom_variable}.")
     return ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key)
+
+
+# Variable d'environnement de la clé API, selon le domaine de l'URL du fournisseur
+KEY_ENV_BY_HOST = {
+    "api.groq.com": "GROQ_API_KEY",
+    "generativelanguage.googleapis.com": "GEMINI_API_KEY",
+    "openrouter.ai": "OPENROUTER_API_KEY",
+}
+
+
+def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None = None) -> "ClientLLM":
+    """Crée le client LLM à partir des options --provider-url, --model-name et --api-key-env.
+
+    Sans --api-key-env, la variable de la clé est déduite du domaine de l'URL.
+    """
+    # --provider-url est l'url de base, ClientLLM veut l'url complete
+    url = provider_url.rstrip("/")
+    if not url.endswith("/chat/completions"):
+        url += "/chat/completions"
+
+    if api_key_env is None:
+        host = urllib.parse.urlparse(url).hostname or ""
+        if host not in KEY_ENV_BY_HOST:
+            raise ValueError(f"Fournisseur inconnu ({host}) : indique la variable de la clé avec --api-key-env")
+        api_key_env = KEY_ENV_BY_HOST[host]
+
+    api_key = os.getenv(api_key_env)
+    if not api_key:
+        raise ValueError(f"Clé API manquante : la variable d'environnement {api_key_env} n'est pas définie")
+    return ClientLLM(adress=url, modele=modele, key=api_key)
 
 def format_observation(result: ExecutionResult) -> str:
     """What the LLM sees after its code ran: printed output, then the error if any."""

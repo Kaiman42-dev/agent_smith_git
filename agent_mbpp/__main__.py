@@ -2,7 +2,6 @@
 import argparse
 import ast
 import json
-import os
 import shlex
 import sys
 import time
@@ -10,7 +9,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv # type: ignore
 
-from agent_algo.agent import Agent, ClientLLM
+from agent_algo.agent import Agent, creer_client_cli
 from mcp_bridge import build_manual, build_tools
 from mcp_client import SyncMcpClient
 from models_public import MBPPTaskInput, SolutionOutput
@@ -79,6 +78,8 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--model-name", default="gemini-3.6-flash")
     parser.add_argument("--provider-url", default="https://generativelanguage.googleapis.com/v1beta/openai")
+    parser.add_argument("--api-key-env", default=None,
+                        help="variable d'environnement de la clé (par défaut : déduite de --provider-url)")
     args = parser.parse_args()
 
     debut = time.time() # pour mesurer le temps total de l'agent
@@ -87,10 +88,10 @@ def main():
     with open(args.task_file) as f:
         tache = MBPPTaskInput.model_validate(json.load(f))
 
-    url = args.provider_url.rstrip("/")
-    if not url.endswith("/chat/completions"):
-        url += "/chat/completions"
-    client = ClientLLM(adress=url, modele=args.model_name, key=os.getenv("GEMINI_API_KEY"))
+    try:
+        client = creer_client_cli(args.provider_url, args.model_name, args.api_key_env)
+    except ValueError as e:
+        sys.exit(f"Erreur de configuration : {e}")
 
     erreur = None
     reponse, steps, agent_succes = "", [], False
