@@ -6,3 +6,6 @@ __pycache__/
 # sorties de nos essais locaux (on ne les commite pas)
 cache/bench/
 cache/debug_solution.json
+
+# réglages personnels de l'éditeur
+.vscode/
