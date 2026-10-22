@@ -15,7 +15,14 @@ from mcp_client import SyncMcpClient
 from models_public import MBPPTaskInput, SolutionOutput
 from sandbox.parent import Sandbox
 
-MAX_TOURS = 10  # limite de la moulinette pour MBPP
+# limites de la moulinette pour MBPP (sujet, VI.1)
+MAX_TOURS = 10
+MAX_INPUT_TOKENS = 6000
+MAX_OUTPUT_TOKENS = 1500
+TIMEOUT = 120
+# On s'arrête avant : un tour lancé juste avant l'heure limite peut encore exécuter du code
+# dans la sandbox (jusqu'à 30 s), puis il faut fermer la sandbox et écrire solution.json
+MARGE = 40
 
 # Our MBPP MCP server, started over stdio with the current Python interpreter
 MBPP_SERVER = Path(__file__).resolve().parent.parent / "mcp_tools_mbpp.py"
@@ -73,6 +80,7 @@ def solution_from_answer(answer: str, steps, function_name: str) -> str:
 
 
 def main():
+    fin = time.monotonic() + TIMEOUT - MARGE  # tout au début : le chrono de la moulinette tourne déjà
     parser = argparse.ArgumentParser()
     parser.add_argument("--task-file", required=True)
     parser.add_argument("--output", required=True)
@@ -108,7 +116,9 @@ def main():
                 sandbox.execute(f"tests = {tache.test_imports + tache.test_list!r}")
                 agent = Agent(question=construire_question(tache), max_tours=MAX_TOURS, client=client,
                               sandbox=sandbox, prompt_systeme=PROMPT_MBPP,
-                              tools_manual=build_manual(mcp_client.list_tools()), secours=secours)
+                              tools_manual=build_manual(mcp_client.list_tools()), secours=secours,
+                              max_input_tokens=MAX_INPUT_TOKENS, max_output_tokens=MAX_OUTPUT_TOKENS,
+                              fin=fin)
                 system_prompt = agent.prompt_systeme  # includes the tools manual
                 reponse, steps = agent.agent_algo()
                 agent_succes = agent.succes

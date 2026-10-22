@@ -17,7 +17,15 @@ from mcp_client import SyncMcpClient
 from models_public import SWEBenchTaskInput, SolutionOutput
 from sandbox.parent import Sandbox
 
-MAX_TOURS = 30  # limite de la moulinette pour SWE-bench[cite: 27]
+# limites de la moulinette pour SWE-bench (sujet, VI.1)
+MAX_TOURS = 30
+MAX_INPUT_TOKENS = 300_000
+MAX_OUTPUT_TOKENS = 10_000
+TIMEOUT = 900
+# On s'arrête avant : un tour lancé juste avant l'heure limite peut encore appeler run_tests()
+# (jusqu'à 300 s, l'outil n'est pas soumis au timeout de la sandbox), puis il faut
+# supprimer le conteneur et écrire solution.json
+MARGE = 330
 
 # Our SWE-bench MCP server
 SWEBENCH_SERVER = Path(__file__).resolve().parent.parent / "mcp_tools_swebench.py"
@@ -58,6 +66,7 @@ def cleanup_container(signum=None, frame=None):
         sys.exit(1)
 
 def main():
+    fin = time.monotonic() + TIMEOUT - MARGE  # tout au début : le chrono de la moulinette tourne déjà
     # Gestion du SIGTERM envoyé par la moulinette[cite: 28]
     signal.signal(signal.SIGTERM, cleanup_container)
     signal.signal(signal.SIGINT, cleanup_container)
@@ -113,7 +122,9 @@ def main():
 
                 agent = Agent(question=question, max_tours=MAX_TOURS, client=client,
                               sandbox=sandbox, prompt_systeme=PROMPT_SWEBENCH,
-                              tools_manual=build_manual(mcp_client.list_tools()), secours=secours)
+                              tools_manual=build_manual(mcp_client.list_tools()), secours=secours,
+                              max_input_tokens=MAX_INPUT_TOKENS, max_output_tokens=MAX_OUTPUT_TOKENS,
+                              fin=fin)
                 
                 system_prompt = agent.prompt_systeme
                 reponse, steps = agent.agent_algo()

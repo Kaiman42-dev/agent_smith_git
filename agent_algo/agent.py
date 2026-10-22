@@ -138,11 +138,16 @@ class ClientLLM:
         self.retries = 0
         self.total_requetes = 0  # toutes les requetes envoyees, retries compris
 
-    def appel_llm(self, messages):
-        """Envoie la conversation au modèle et renvoie son message de réponse"""
-        corps = json.dumps(
-            {"model": self.modele, "messages": messages, "stream": False }
-        ).encode()
+    def appel_llm(self, messages, max_tokens=None, fin=None):
+        """Envoie la conversation au modèle et renvoie son message de réponse.
+
+        max_tokens : nombre maximal de tokens que le modèle peut générer (budget restant).
+        fin : heure limite (time.monotonic()) ; aucun essai ni aucune attente ne la dépasse.
+        """
+        options = {"model": self.modele, "messages": messages, "stream": False}
+        if max_tokens is not None:
+            options["max_tokens"] = max_tokens
+        corps = json.dumps(options).encode()
         requete = urllib.request.Request(
             self.adress, data=corps,
             headers={
@@ -154,11 +159,15 @@ class ClientLLM:
         )
         i = 0
         while i <= 5:
+            reste = None if fin is None else fin - time.monotonic()
+            if reste is not None and reste < 1:
+                logging.error("Plus de temps pour appeler le LLM (limite de temps de la tâche).")
+                return None, None
             self.retries = i
             self.total_requetes += 1
             debut = time.perf_counter()
             try:
-                with urllib.request.urlopen(requete, timeout=40) as response: #envoie la requete au serveur
+                with urllib.request.urlopen(requete, timeout=min(40, reste or 40)) as response: #envoie la requete au serveur
                     reponse = json.load(response)
                 self.temps_ms = (time.perf_counter() - debut) * 1000
                 usage = reponse.get("usage") or {}  # nombre de tokens renvoye par l'API
@@ -177,36 +186,47 @@ class ClientLLM:
                     return None, e.code
                 attente = e.headers.get("Retry-After") if e.headers else None  # le serveur peut dire combien attendre
                 i = i + 1
-                self.attendre(i, attente)
+                self.attendre(i, attente, fin)
             except urllib.error.URLError as e:
                 logging.error(f"Echec URL. Raison {e.reason}")
                 i = i + 1
-                self.attendre(i)
+                self.attendre(i, fin=fin)
             except TimeoutError as e:
                 logging.error(f"Timeout. Raison {e}")
                 i = i + 1
-                self.attendre(i)
+                self.attendre(i, fin=fin)
         return None, None  # si on a fait 5 essais sans succes, on renvoie None
 
 
-    def attendre(self, essai, attente=None):
-        """attend avant de reessayer : 1s, 2s, 4s, 8s... (ou ce que demande le serveur), max 20s"""
+    def attendre(self, essai, attente=None, fin=None):
+        """attend avant de reessayer : 1s, 2s, 4s, 8s... (ou ce que demande le serveur), max 20s,
+        et jamais au-delà de l'heure limite"""
         if essai > 5:  # plus d'essai apres, inutile d'attendre
             return
         try:
             secondes = float(attente)
         except (TypeError, ValueError):
             secondes = 2 ** (essai - 1)
+        if fin is not None:
+            secondes = min(secondes, max(0, fin - time.monotonic()))
         time.sleep(min(secondes, 20))
+
+
+def taille(memoire) -> int:
+    """Nombre de caractères de la conversation (sert à estimer les tokens du prochain appel)."""
+    return sum(len(m["content"]) for m in memoire)
 
 
 class Agent:
     def __init__(self, question, max_tours, client, sandbox: Sandbox,
                  prompt_systeme=PROMPT_SYSTEME, tools_manual: str = "",
-                 secours: list | None = None):
+                 secours: list | None = None, max_input_tokens: int | None = None,
+                 max_output_tokens: int | None = None, fin: float | None = None):
         """sandbox: created by the caller, who chooses its MCP tools.
         tools_manual: tool documentation appended to the system prompt.
-        secours: clients LLM de secours, essayés dans l'ordre si le client actuel ne répond plus."""
+        secours: clients LLM de secours, essayés dans l'ordre si le client actuel ne répond plus.
+        max_input_tokens, max_output_tokens : budget de tokens pour toute la tâche (sujet, VI.1).
+        fin : heure limite de la tâche (time.monotonic()). None = pas de limite."""
         self.question = question
         self.max_tours = max_tours
         self.client = client
@@ -216,19 +236,46 @@ class Agent:
             self.prompt_systeme += "\n\n" + tools_manual
         self.succes = False  # passe a True si le llm donne une reponse finale
         self.secours = list(secours or [])  # copie : on la vide au fur et à mesure des bascules
+        self.max_input_tokens = max_input_tokens
+        self.max_output_tokens = max_output_tokens
+        self.fin = fin
+        self.taille_dernier_envoi = 0  # caractères envoyés au dernier appel
 
 
-    def appeler_llm(self, memoire):
+    def temps_ecoule(self) -> bool:
+        return self.fin is not None and time.monotonic() >= self.fin
+
+
+    def raison_arret(self, steps, memoire) -> str | None:
+        """Avant chaque appel au LLM : pourquoi il faut s'arrêter, ou None s'il reste du budget."""
+        if self.temps_ecoule():
+            return "limite de temps atteinte"
+        sortie = sum(s.output_tokens for s in steps)
+        if self.max_output_tokens is not None and sortie >= self.max_output_tokens:
+            return f"limite de tokens de sortie atteinte ({sortie}/{self.max_output_tokens})"
+        if self.max_input_tokens is not None and steps:
+            # chaque appel renvoie toute la conversation : le prochain coûtera autant que le
+            # dernier, plus ce qu'on a ajouté depuis (environ 1 token pour 3 caractères)
+            prochain = steps[-1].input_tokens + (taille(memoire) - self.taille_dernier_envoi) // 3
+            entree = sum(s.input_tokens for s in steps)
+            if entree + prochain > self.max_input_tokens:
+                return (f"limite de tokens d'entrée atteinte ({entree} utilisés, "
+                        f"~{prochain} pour le prochain appel, limite {self.max_input_tokens})")
+        return None
+
+
+    def appeler_llm(self, memoire, max_tokens=None):
         """Appelle le LLM ; si le fournisseur ne répond plus, bascule sur le client de secours suivant.
 
         Renvoie (message, None), ou (None, code_erreur) quand plus aucun fournisseur ne répond.
         """
         while True:
-            message, code_erreur = self.client.appel_llm(memoire)
+            message, code_erreur = self.client.appel_llm(memoire, max_tokens=max_tokens, fin=self.fin)
             if message is not None:
                 return message, None
-            # 400/404 : notre requête est fausse (modèle inconnu...), changer de fournisseur n'y changera rien
-            if code_erreur in (400, 404) or not self.secours:
+            # 400/404 : notre requête est fausse (modèle inconnu...), changer de fournisseur n'y changera rien.
+            # Temps écoulé : un autre fournisseur n'aurait pas plus de temps.
+            if code_erreur in (400, 404) or not self.secours or self.temps_ecoule():
                 return None, code_erreur
             ancien, self.client = self.client, self.secours.pop(0)
             logging.warning(f"{ancien.modele} indisponible (code {code_erreur}), bascule sur {self.client.modele}")
@@ -243,8 +290,16 @@ class Agent:
         steps: list[StepMetrics] = []  # une fiche par tour, pour solution.json
 
         for tour in range(1, self.max_tours + 1):
-            message, code_erreur = self.appeler_llm(memoire) # parti de thinking
+            raison = self.raison_arret(steps, memoire)  # on vérifie le budget AVANT de dépenser
+            if raison:
+                return f"Arret de l'agent : {raison}.", steps
+            self.taille_dernier_envoi = taille(memoire)
+            restant = None if self.max_output_tokens is None else \
+                self.max_output_tokens - sum(s.output_tokens for s in steps)
+            message, code_erreur = self.appeler_llm(memoire, restant) # parti de thinking
             if message is None:  # plus aucun fournisseur ne repond : on arrete
+                if self.temps_ecoule():
+                    return "Arret de l'agent : limite de temps atteinte pendant l'appel au LLM.", steps
                 return f"Le LLM ne répond plus (dernier code : {code_erreur}), arret de l'agent.", steps
             brut = message.get("content") or ""
             contenu = couper_observation_inventee(brut)  # on garde seulement ce qui précède l'observation inventée

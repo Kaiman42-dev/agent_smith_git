@@ -15,7 +15,7 @@ class FauxClient:
         self.input_tokens = self.output_tokens = self.retries = 0
         self.temps_ms = 0.0
 
-    def appel_llm(self, memoire):
+    def appel_llm(self, memoire, **options):
         self.appels.append([m["content"] for m in memoire])
         return self.reponses.pop(0)
 
