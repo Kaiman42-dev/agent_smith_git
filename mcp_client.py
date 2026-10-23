@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import os
 import shlex
 import sys
 import threading
@@ -26,7 +27,7 @@ class McpClient:
         if self.target.startswith(("http://", "https://")):
             return streamable_http_client(self.target)
         command, *args = shlex.split(self.target)
-        return stdio_client(StdioServerParameters(command=command, args=args))
+        return stdio_client(StdioServerParameters(command=command, args=args, env=os.environ))
 
     async def __aenter__(self):
         # AsyncExitStack replaces the two nested `async with`: it opens the
