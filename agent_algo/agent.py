@@ -126,6 +126,7 @@ class ClientLLM:
         self.temps_ms = 0.0
         self.retries = 0
         self.total_requetes = 0  # toutes les requetes envoyees, retries compris
+        self.erreurs = []  # erreurs du dernier appel ("503", "timeout"...), pour les metriques du benchmark
 
     def appel_llm(self, messages, max_tokens=None, fin=None):
         """Envoie la conversation au modèle et renvoie son message de réponse.
@@ -146,6 +147,7 @@ class ClientLLM:
                 "User-Agent": "agent-smith/0.1",
             },
         )
+        self.erreurs = []
         i = 0
         while i <= 5:
             reste = None if fin is None else fin - time.monotonic()
@@ -165,6 +167,7 @@ class ClientLLM:
                 return reponse["choices"][0]["message"], None # retourne la reponse du serveur
             except urllib.error.HTTPError as e:
                 logging.error(f"Echec HTTP. Code {e.code}, Raison {e.reason}")
+                self.erreurs.append(str(e.code))
                 if e.code == 429:
                     logging.error("Trop de requetes (429) : on passe au fournisseur suivant.")
                     return None, e.code
@@ -178,10 +181,12 @@ class ClientLLM:
                 self.attendre(i, attente, fin)
             except urllib.error.URLError as e:
                 logging.error(f"Echec URL. Raison {e.reason}")
+                self.erreurs.append(f"url: {e.reason}")
                 i = i + 1
                 self.attendre(i, fin=fin)
             except TimeoutError as e:
                 logging.error(f"Timeout. Raison {e}")
+                self.erreurs.append("timeout")
                 i = i + 1
                 self.attendre(i, fin=fin)
         return None, None  # si on a fait 5 essais sans succes, on renvoie None
@@ -229,6 +234,10 @@ class Agent:
         self.max_output_tokens = max_output_tokens
         self.fin = fin
         self.taille_dernier_envoi = 0  # caractères envoyés au dernier appel
+        # pour les metriques du benchmark (agent_algo/metriques.py) : ce que solution.json ne garde pas
+        self.tour = 0
+        self.incidents = []  # erreurs des fournisseurs : {"step", "model", "error"}
+        self.bascules = []   # changements de fournisseur : {"step", "from", "to", "code"}
 
 
     def temps_ecoule(self) -> bool:
@@ -260,6 +269,8 @@ class Agent:
         """
         while True:
             message, code_erreur = self.client.appel_llm(memoire, max_tokens=max_tokens, fin=self.fin)
+            self.incidents += [{"step": self.tour, "model": self.client.modele, "error": e}
+                               for e in self.client.erreurs]
             if message is not None:
                 return message, None
             # 400/404 : notre requête est fausse (modèle inconnu...), changer de fournisseur n'y changera rien.
@@ -267,6 +278,7 @@ class Agent:
             if code_erreur in (400, 404) or not self.secours or self.temps_ecoule():
                 return None, code_erreur
             ancien, self.client = self.client, self.secours.pop(0)
+            self.bascules.append({"step": self.tour, "from": ancien.modele, "to": self.client.modele, "code": code_erreur})
             logging.warning(f"{ancien.modele} indisponible (code {code_erreur}), bascule sur {self.client.modele}")
 
 
@@ -279,6 +291,7 @@ class Agent:
         steps: list[StepMetrics] = []  # une fiche par tour, pour solution.json
 
         for tour in range(1, self.max_tours + 1):
+            self.tour = tour
             raison = self.raison_arret(steps, memoire)  # on vérifie le budget AVANT de dépenser
             if raison:
                 return f"Arret de l'agent : {raison}.", steps

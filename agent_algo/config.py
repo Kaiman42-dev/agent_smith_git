@@ -49,6 +49,11 @@ class ModelsConfig(BaseModel):
         host = urlparse(url).hostname or ""
         return next((p for p in self.providers if p.host == host), None)
 
+    def nom_pour_url(self, url: str) -> str:
+        """Le nom du fournisseur de l'URL, ou son domaine s'il n'est pas dans models.json."""
+        fournisseur = self.fournisseur_pour_url(url)
+        return fournisseur.name if fournisseur else urlparse(url).hostname or ""
+
 
 def charger_config(path: Path | str = MODELS_JSON) -> ModelsConfig:
     """Lit et valide models.json. Lève ValueError si le fichier est illisible ou invalide."""

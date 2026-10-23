@@ -16,6 +16,7 @@ class ClientCompteur:
         self.max_tokens_recus = []
         self.input_tokens = self.output_tokens = self.retries = 0
         self.temps_ms = 0.0
+        self.erreurs = []
 
     def appel_llm(self, memoire, max_tokens=None, fin=None):
         self.max_tokens_recus.append(max_tokens)

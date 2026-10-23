@@ -14,10 +14,13 @@ class FauxClient:
         self.appels = []  # la conversation reçue à chaque appel
         self.input_tokens = self.output_tokens = self.retries = 0
         self.temps_ms = 0.0
+        self.erreurs = []
 
     def appel_llm(self, memoire, **options):
         self.appels.append([m["content"] for m in memoire])
-        return self.reponses.pop(0)
+        message, code = self.reponses.pop(0)
+        self.erreurs = [] if message is not None else [str(code)]  # comme ClientLLM
+        return message, code
 
 
 def lancer(principal, secours):

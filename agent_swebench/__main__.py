@@ -13,6 +13,7 @@ from dotenv import load_dotenv # type: ignore
 
 from agent_algo.agent import Agent, creer_client_cli, creer_clients_secours
 from agent_algo.config import charger_config
+from agent_algo.metriques import ecrire_metriques, metriques_du_run
 from mcp_bridge import build_manual, build_tools
 from mcp_client import SyncMcpClient
 from models_public import SWEBenchTaskInput, SolutionOutput
@@ -98,6 +99,7 @@ def main():
     secours = [] if args.no_fallback else creer_clients_secours(client, config)
 
     erreur = None
+    agent = None
     reponse, steps, agent_succes = "", [], False
     system_prompt = PROMPT_SWEBENCH
     patch = ""
@@ -170,6 +172,7 @@ def main():
     
     with open(args.output, "w") as f:
         f.write(sortie.model_dump_json(indent=2))
+    ecrire_metriques(args.output, metriques_du_run(sortie, client, config, agent))  # pour le benchmark
         
     print(f"[*] Solution écrite dans {args.output} (succès={succes}, tours={len(steps)})")
 
