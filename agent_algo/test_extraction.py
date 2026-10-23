@@ -1,6 +1,11 @@
 """Tests de l'extraction multi-format (sujet, V.1) : Python, XML, JSON/Hermes, ReAct, sans réseau."""
+import io
+import json
+import urllib.error
+import urllib.request
+
 from Extraction_llm import extraire_code
-from agent_algo.agent import Agent
+from agent_algo.agent import Agent, ClientLLM, generation_refusee
 from agent_algo.test_bascule import FauxClient
 from agent_algo.test_observation import FausseSandbox
 
@@ -116,3 +121,53 @@ def test_l_agent_execute_un_appel_xml():
     assert reponse == "fini"
     assert sandbox.codes == [extraire_code(XML)]
     assert steps[0].sandbox_input.startswith("result = read_file(")
+
+
+# AS-38 : appel d'outil natif refusé par Groq (400 tool_use_failed)
+
+NATIF = '{"name": "run_tests", "arguments": {"code": "def f():\\n    return 1", "test_list": ["assert f() == 1"]}}'
+
+
+def test_json_sans_balises():
+    assert executer_run_tests(extraire_code(NATIF)) == [((), {"code": "def f():\n    return 1",
+                                                              "test_list": ["assert f() == 1"]})]
+
+
+def test_json_sans_balises_liste_d_appels():
+    assert len(executer_run_tests(extraire_code(f"[{NATIF}, {NATIF}]"))) == 2
+
+
+def test_json_ordinaire_n_est_pas_un_appel():
+    assert extraire_code('{"answer": 42}') is None
+    assert extraire_code('Thought: {"name": "run_tests"} dans une phrase') is None
+
+
+def executer_run_tests(code):
+    appels = []
+    exec(code, {"run_tests": lambda *a, **k: appels.append((a, k)), "print": lambda *a: None})
+    return appels
+
+
+def erreur_http(code, corps):
+    return urllib.error.HTTPError("https://faux.test", code, "Bad Request", {}, io.BytesIO(corps.encode()))
+
+
+def test_generation_refusee():
+    corps = json.dumps({"error": {"code": "tool_use_failed", "failed_generation": NATIF}})
+    assert generation_refusee(erreur_http(400, corps)) == NATIF
+    assert generation_refusee(erreur_http(400, '{"error": {"code": "invalid_request_error"}}')) is None
+    assert generation_refusee(erreur_http(400, "pas du json")) is None
+
+
+def test_le_client_garde_le_texte_refuse(monkeypatch):
+    corps = json.dumps({"error": {"code": "tool_use_failed", "failed_generation": NATIF}})
+
+    def urlopen(*args, **kwargs):
+        raise erreur_http(400, corps)
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    client = ClientLLM("https://faux.test/v1/chat/completions", "m", "cle")
+    message, code = client.appel_llm([{"role": "user", "content": "x" * 300}])
+    assert (message["content"], code) == (NATIF, None)
+    assert client.input_tokens == 100 and client.output_tokens == len(NATIF) // 3  # estimés
+    assert client.erreurs == ["400"]  # reste visible dans les métriques

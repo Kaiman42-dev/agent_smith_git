@@ -52,19 +52,36 @@ def p_XML(s):
 		appels.append(appel_python(name, {k: valeur_xml(v.strip()) for k, v in params}))
 	return joindre(appels)
 
+def appel_json(data):
+	"""{"name": "outil", "arguments": {...}} -> appel Python, None si ce n'est pas un appel d'outil"""
+	if not isinstance(data, dict) or "name" not in data:
+		return None
+	arguments = data.get("arguments", data.get("parameters", {}))
+	if isinstance(arguments, str): # certaines API envoient les arguments en chaine JSON
+		try:
+			arguments = json.loads(arguments)
+		except ValueError:
+			return None
+	return appel_python(data["name"], arguments)
+
 def p_json(s):
 	"""<tool_call>{"name": "outil", "arguments": {...}}</tool_call> (style Hermes)"""
 	appels = []
 	for bloc in re.findall(r"<tool_call>(.*?)</tool_call>", s, re.DOTALL):
 		try:
-			data = json.loads(bloc.strip())
-			arguments = data.get("arguments", data.get("parameters", {}))
-			if isinstance(arguments, str): # certaines API envoient les arguments en chaine JSON
-				arguments = json.loads(arguments)
-			appels.append(appel_python(data.get("name"), arguments))
-		except (ValueError, AttributeError):
+			appels.append(appel_json(json.loads(bloc.strip())))
+		except ValueError:
 			return None
 	return joindre(appels)
+
+def p_json_brut(s):
+	"""la reponse entiere est un appel JSON sans balises : {"name": ..., "arguments": ...} ou une liste.
+	C'est ce que renvoie Groq dans failed_generation quand il refuse un appel d'outil natif."""
+	try:
+		data = json.loads(s.strip())
+	except ValueError:
+		return None
+	return joindre([appel_json(d) for d in (data if isinstance(data, list) else [data])])
 
 def p_ReAct(s):
 	"""Action: outil / Action Input: {...}"""
@@ -81,10 +98,11 @@ def p_ReAct(s):
 
 def extraire_code(s):
 	"""essaie les formats dans l'ordre du sujet (V.1) : Python, XML, JSON/Hermes, ReAct.
+	Le JSON sans balises (appel d'outil natif) passe juste apres le JSON/Hermes.
 
 	Renvoie le code Python a executer, ou None si la reponse n'en contient pas.
 	"""
-	for parseur in (p_mardown, p_XML, p_json, p_ReAct):
+	for parseur in (p_mardown, p_XML, p_json, p_json_brut, p_ReAct):
 		code = parseur(s)
 		if code is not None:
 			return code

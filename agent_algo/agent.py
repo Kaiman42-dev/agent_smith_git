@@ -115,6 +115,23 @@ def format_observation(result: ExecutionResult) -> str:
         observation = "(the code ran without error and printed nothing)"
     return observation[:MAX_OBSERVATION]
 
+def generation_refusee(erreur: urllib.error.HTTPError) -> str | None:
+    """Le texte du modèle quand le fournisseur a refusé son appel d'outil natif, sinon None.
+
+    Sans outil déclaré dans la requête, Groq refuse un appel d'outil natif avec
+    400 "tool_use_failed", mais renvoie ce que le modèle a écrit dans failed_generation
+    (ex. {"name": "run_tests", "arguments": {...}}). Extraction_llm sait le convertir en Python.
+    """
+    try:
+        corps = json.loads(erreur.read())
+    except (ValueError, OSError):
+        return None
+    detail = corps.get("error") if isinstance(corps, dict) else None
+    if isinstance(detail, dict) and detail.get("code") == "tool_use_failed":
+        return detail.get("failed_generation") or None
+    return None
+
+
 class ClientLLM:
     def __init__(self, adress, modele, key):
         self.adress = adress
@@ -168,6 +185,15 @@ class ClientLLM:
             except urllib.error.HTTPError as e:
                 logging.error(f"Echec HTTP. Code {e.code}, Raison {e.reason}")
                 self.erreurs.append(str(e.code))
+                generation = generation_refusee(e) if e.code == 400 else None
+                if generation is not None:
+                    logging.warning("Appel d'outil natif refusé par le fournisseur : on garde le texte généré.")
+                    self.temps_ms = (time.perf_counter() - debut) * 1000
+                    # l'erreur ne donne pas l'usage : estimation prudente (~1 token pour 3 caractères,
+                    # comme raison_arret) pour que les limites de tokens restent respectées
+                    self.input_tokens = taille(messages) // 3
+                    self.output_tokens = len(generation) // 3
+                    return {"role": "assistant", "content": generation}, None
                 if e.code == 429:
                     logging.error("Trop de requetes (429) : on passe au fournisseur suivant.")
                     return None, e.code
