@@ -2,7 +2,6 @@
 import argparse
 import ast
 import json
-import os
 import shlex
 import sys
 import time
@@ -10,11 +9,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv # type: ignore
 
-from agent_algo.agent import Agent, ClientLLM
+from agent_algo.agent import Agent, creer_client_cli, creer_clients_secours
 from mcp_bridge import build_manual, build_tools
 from mcp_client import SyncMcpClient
 from models_public import MBPPTaskInput, SolutionOutput
-from sandbox.sandbox import Sandbox
+from sandbox.parent import Sandbox
 
 MAX_TOURS = 10  # limite de la moulinette pour MBPP
 
@@ -79,19 +78,23 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--model-name", default="gemini-3.6-flash")
     parser.add_argument("--provider-url", default="https://generativelanguage.googleapis.com/v1beta/openai")
+    parser.add_argument("--api-key-env", default=None,
+                        help="variable d'environnement de la clé (par défaut : déduite de --provider-url)")
+    parser.add_argument("--no-fallback", action="store_true",
+                        help="ne jamais changer de fournisseur (benchmark : un seul modèle par run)")
     args = parser.parse_args()
 
-    debut = time.time()
+    debut = time.time() # pour mesurer le temps total de l'agent
     load_dotenv()
 
     with open(args.task_file) as f:
         tache = MBPPTaskInput.model_validate(json.load(f))
 
-    # --provider-url est l'url de base, ClientLLM veut l'url complete
-    url = args.provider_url.rstrip("/")
-    if not url.endswith("/chat/completions"):
-        url += "/chat/completions"
-    client = ClientLLM(adress=url, modele=args.model_name, key=os.getenv("GEMINI_API_KEY"))
+    try:
+        client = creer_client_cli(args.provider_url, args.model_name, args.api_key_env)
+    except ValueError as e:
+        sys.exit(f"Erreur de configuration : {e}")
+    secours = [] if args.no_fallback else creer_clients_secours(client)
 
     erreur = None
     reponse, steps, agent_succes = "", [], False
@@ -99,13 +102,13 @@ def main():
     try:
         # The MBPP MCP server provides run_tests. One sandbox process for the
         # whole task, so variables persist between steps
-        with SyncMcpClient(MBPP_SERVER_COMMAND) as mcp_client:
-            with Sandbox(tools=build_tools(mcp_client)) as sandbox:
+        with SyncMcpClient(MBPP_SERVER_COMMAND) as mcp_client: # demarre le serveur MBPP
+            with Sandbox(tools=build_tools(mcp_client)) as sandbox: 
                 # `tests` lets the LLM call run_tests without copying the asserts
                 sandbox.execute(f"tests = {tache.test_imports + tache.test_list!r}")
                 agent = Agent(question=construire_question(tache), max_tours=MAX_TOURS, client=client,
                               sandbox=sandbox, prompt_systeme=PROMPT_MBPP,
-                              tools_manual=build_manual(mcp_client.list_tools()))
+                              tools_manual=build_manual(mcp_client.list_tools()), secours=secours)
                 system_prompt = agent.prompt_systeme  # includes the tools manual
                 reponse, steps = agent.agent_algo()
                 agent_succes = agent.succes
@@ -126,7 +129,7 @@ def main():
         success=succes,
         solution=solution,
         iterations=len(steps),
-        total_requests=client.total_requetes,
+        total_requests=client.total_requetes + sum(c.total_requetes for c in secours),
         total_input_tokens=sum(s.input_tokens for s in steps),
         total_output_tokens=sum(s.output_tokens for s in steps),
         total_time_seconds=time.time() - debut,

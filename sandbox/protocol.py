@@ -1,84 +1,90 @@
-"""Messages exchanged between the parent (sandbox.py) and the child (child.py).
+"""Messages échangés entre le parent (parent.py) et l'enfant (child.py).
 
-Messages travel as JSON, never as pickle: unpickling data can execute code,
-and the LLM's code can reach the pipe from inside the child. With JSON, the
-worst a malicious child can send is a malformed message, which the parent
-rejects.
+Les deux processus communiquent par un Pipe. Ce fichier définit le "langage"
+qu'ils parlent : chaque message est une petite dataclass (RunCode, ToolCall...).
 
-Conversation for one code block:
-    parent -> child   RunCode
-    child  -> parent  ToolCall      (0 or more times, when the code calls a tool)
-    parent -> child   ToolReply     (one per ToolCall)
-    child  -> parent  ExecutionResult or ExitSignal
+Les messages voyagent en JSON, jamais en pickle. Dépickler des données peut
+exécuter du code, et le code du LLM a accès au Pipe depuis l'enfant : un enfant
+malveillant pourrait donc envoyer un pickle piégé. En JSON, le pire qu'il puisse
+envoyer est un message mal formé, que le parent rejette (ProtocolError).
+
+Déroulé d'un bloc de code (une "conversation") :
+    parent -> enfant   RunCode        (voici le code à exécuter)
+    enfant -> parent   ToolCall       (0 ou plusieurs fois : le code appelle un outil)
+    parent -> enfant   ToolReply      (une réponse par ToolCall)
+    enfant -> parent   ExecutionResult ou ExitSignal   (le résultat final)
 """
 
 import json
 from dataclasses import asdict, dataclass
 
-MAX_MESSAGE_BYTES = 10 * 1024 * 1024  # a bigger message is rejected
+MAX_MESSAGE_BYTES = 10 * 1024 * 1024  # un message plus gros est rejeté
 
 
 class ProtocolError(Exception):
-    """A received message is not valid JSON or not a known message."""
+    """Un message reçu n'est pas du JSON valide, ou pas un message connu."""
 
 
 @dataclass
 class RunCode:
-    """Parent asks the child to run a code block."""
+    """Parent -> enfant : exécute ce bloc de code."""
     code: str
-    interactive: bool = False  # REPL: also print the value of the last expression
+    interactive: bool = False  # mode REPL : affiche aussi la valeur de la dernière expression
 
 
 @dataclass
 class ToolCall:
-    """Child asks the parent to call an MCP tool (outside the sandbox)."""
+    """Enfant -> parent : appelle cet outil MCP (hors de la sandbox)."""
     name: str
     arguments: dict
 
 
 @dataclass
 class ToolReply:
-    """Parent answers a ToolCall: either a value or an error message."""
+    """Parent -> enfant : réponse à un ToolCall, soit une valeur, soit une erreur."""
     value: str | None = None
     error: str | None = None
 
 
 @dataclass
 class ExecutionResult:
-    """Outcome of one code block."""
+    """Enfant -> parent : résultat d'un bloc de code."""
     success: bool
-    output: str  # everything printed (stdout + stderr)
-    error: str   # traceback if the code raised, "" otherwise
-    final_answer: str | None = None  # set when the code called final_answer()
+    output: str  # tout ce qui a été affiché (stdout + stderr)
+    error: str   # la traceback si le code a levé une exception, "" sinon
+    final_answer: str | None = None  # rempli quand le code a appelé final_answer()
 
 
 @dataclass
 class ExitSignal:
-    """The code raised SystemExit or KeyboardInterrupt.
+    """Enfant -> parent : le code a levé SystemExit ou KeyboardInterrupt.
 
-    The subject requires these two to reach the agent loop, so the parent
-    re-raises them on its side.
+    Le sujet impose que ces deux exceptions remontent jusqu'à la boucle de
+    l'agent. L'enfant ne peut pas les envoyer telles quelles (elles ne passent
+    pas en JSON), donc il envoie ce signal et le parent les relève de son côté.
     """
-    exception_name: str  # "SystemExit" or "KeyboardInterrupt"
+    exception_name: str  # "SystemExit" ou "KeyboardInterrupt"
     args: list
 
 
+# Table {nom de la classe -> classe}, pour reconstruire un message à la réception
 _MESSAGE_TYPES = {cls.__name__: cls
                   for cls in (RunCode, ToolCall, ToolReply, ExecutionResult, ExitSignal)}
 
 
 def send_message(conn, message):
+    # On ajoute "type" pour que l'autre côté sache quelle dataclass reconstruire
     payload = {"type": type(message).__name__, **asdict(message)}
     conn.send_bytes(json.dumps(payload).encode())
 
 
 def receive_message(conn):
-    """Reads one message. Raises EOFError if the other side is gone."""
+    """Lit un message. Lève EOFError si l'autre processus a fermé le Pipe."""
     try:
         payload = json.loads(conn.recv_bytes(MAX_MESSAGE_BYTES))
         message_class = _MESSAGE_TYPES[payload.pop("type")]
         return message_class(**payload)
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-        # OSError: message too big / ValueError: invalid JSON
-        # KeyError, TypeError, AttributeError: not a known message shape
-        raise ProtocolError(f"Invalid message from the other process: {e}") from e
+        # OSError : message trop gros / ValueError : JSON invalide
+        # KeyError, TypeError, AttributeError : ce n'est pas un message connu
+        raise ProtocolError(f"Message invalide reçu de l'autre processus : {e}") from e

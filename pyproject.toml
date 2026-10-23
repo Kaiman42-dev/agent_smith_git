@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sandbox = "sandbox.sandbox_cli:main"
+sandbox = "sandbox.cli:main"
 
 # Needed for uv to install the `sandbox` command
 [build-system]
