@@ -115,6 +115,19 @@ def format_observation(result: ExecutionResult) -> str:
         observation = "(the code ran without error and printed nothing)"
     return observation[:MAX_OBSERVATION]
 
+def compter_tokens(usage: dict) -> tuple[int, int]:
+    """(entrée, sortie) d'après le champ usage de la réponse.
+
+    Gemini ne compte pas sa réflexion cachée dans completion_tokens, mais bien dans
+    total_tokens : la sortie est donc tout ce qui a été généré en plus de l'entrée.
+    Groq et OpenRouter l'incluent déjà, le max ne change rien pour eux.
+    """
+    entree = usage.get("prompt_tokens") or 0
+    sortie = usage.get("completion_tokens") or 0
+    total = usage.get("total_tokens") or 0
+    return entree, max(sortie, total - entree)
+
+
 def generation_refusee(erreur: urllib.error.HTTPError) -> str | None:
     """Le texte du modèle quand le fournisseur a refusé son appel d'outil natif, sinon None.
 
@@ -178,9 +191,8 @@ class ClientLLM:
                 with urllib.request.urlopen(requete, timeout=min(40, reste or 40)) as response: #envoie la requete au serveur
                     reponse = json.load(response)
                 self.temps_ms = (time.perf_counter() - debut) * 1000
-                usage = reponse.get("usage") or {}  # nombre de tokens renvoye par l'API
-                self.input_tokens = usage.get("prompt_tokens", 0)
-                self.output_tokens = usage.get("completion_tokens", 0)
+                # nombre de tokens renvoye par l'API
+                self.input_tokens, self.output_tokens = compter_tokens(reponse.get("usage") or {})
                 return reponse["choices"][0]["message"], None # retourne la reponse du serveur
             except urllib.error.HTTPError as e:
                 logging.error(f"Echec HTTP. Code {e.code}, Raison {e.reason}")

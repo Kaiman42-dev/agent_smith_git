@@ -1,7 +1,7 @@
 """Tests des limites de la tâche (sujet, VI.1) : tokens et temps, sans réseau."""
 import time
 
-from agent_algo.agent import Agent
+from agent_algo.agent import Agent, compter_tokens
 
 # ni code ni réponse finale : la boucle continue jusqu'à une limite
 REFLEXION = {"content": "Thought: je réfléchis encore"}
@@ -58,3 +58,21 @@ def test_sans_limite_rien_ne_change():
     client = ClientCompteur(entree=2500, sortie=600)
     reponse, steps = lancer(client)
     assert len(steps) == 10 and client.max_tokens_recus == [None] * 10
+
+
+def test_compter_tokens_reflexion_gemini():
+    # usage réel de gemini-3.6-flash : la réflexion n'est que dans total_tokens
+    assert compter_tokens({"completion_tokens": 1, "prompt_tokens": 14, "total_tokens": 408}) == (14, 394)
+
+
+def test_compter_tokens_reflexion_deja_incluse():
+    # usage réel de gpt-oss-120b sur Groq : reasoning_tokens est compris dans completion_tokens
+    usage = {"prompt_tokens": 82, "completion_tokens": 57, "total_tokens": 139,
+             "completion_tokens_details": {"reasoning_tokens": 46}}
+    assert compter_tokens(usage) == (82, 57)
+
+
+def test_compter_tokens_usage_incomplet():
+    assert compter_tokens({}) == (0, 0)
+    assert compter_tokens({"prompt_tokens": 10, "completion_tokens": 5}) == (10, 5)
+    assert compter_tokens({"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}) == (0, 0)
