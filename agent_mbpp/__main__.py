@@ -59,26 +59,41 @@ def nettoyer_code(code: str) -> str:
     return "\n\n".join(ast.unparse(n) for n in garde)
 
 
+def code_de_la_fonction(code: str, nom_fonction: str) -> str | None:
+    """la fonction definie dans le code, ou dans une de ses chaines : le prompt fait ecrire
+    code = '''def f(...): ...''' puis run_tests(code=code, ...). None si on ne la trouve pas."""
+    try:
+        arbre = ast.parse(code)
+    except SyntaxError:
+        return None
+    if any(isinstance(n, ast.FunctionDef) and n.name == nom_fonction for n in arbre.body):
+        return nettoyer_code(code)
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, ast.Constant) and isinstance(noeud.value, str) \
+                and f"def {nom_fonction}" in noeud.value:
+            solution = code_de_la_fonction(noeud.value, nom_fonction)
+            if solution:
+                return solution
+    return None
+
+
 def extraire_solution(steps, nom_fonction: str) -> str:
-    """cherche le dernier code qui definit la fonction, en priorite celui qui a tourne sans erreur"""
+    """cherche le dernier code qui definit la fonction : en priorite celui dont run_tests a
+    reussi, puis celui qui a tourne sans erreur, puis n'importe lequel"""
     candidats = [s for s in steps if f"def {nom_fonction}" in s.sandbox_input]
+    reussis = [s for s in candidats if '"success": true' in s.sandbox_output]
     sans_erreur = [s for s in candidats if "Traceback" not in s.sandbox_output]
-    for s in reversed(sans_erreur or candidats):
-        try:
-            return nettoyer_code(s.sandbox_input)
-        except SyntaxError:
-            continue
+    for groupe in (reussis, sans_erreur, candidats):
+        for s in reversed(groupe):
+            solution = code_de_la_fonction(s.sandbox_input, nom_fonction)
+            if solution:
+                return solution
     return ""
 
 
 def solution_from_answer(answer: str, steps, function_name: str) -> str:
     """final_answer(code) gives the solution directly; otherwise search the steps."""
-    if f"def {function_name}" in answer:
-        try:
-            return nettoyer_code(answer)
-        except SyntaxError:
-            pass
-    return extraire_solution(steps, function_name)
+    return code_de_la_fonction(answer, function_name) or extraire_solution(steps, function_name)
 
 
 def main():
