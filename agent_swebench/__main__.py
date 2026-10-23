@@ -12,6 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv # type: ignore
 
 from agent_algo.agent import Agent, creer_client_cli, creer_clients_secours
+from agent_algo.config import charger_config
 from mcp_bridge import build_manual, build_tools
 from mcp_client import SyncMcpClient
 from models_public import SWEBenchTaskInput, SolutionOutput
@@ -74,8 +75,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task-file", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--model-name", default="gemini-3.6-flash")
-    parser.add_argument("--provider-url", default="https://generativelanguage.googleapis.com/v1beta/openai")
+    parser.add_argument("--model-name", default=None, help="par défaut : default_model de models.json")
+    parser.add_argument("--provider-url", default=None, help="par défaut : url de default_provider de models.json")
     parser.add_argument("--api-key-env", default=None,
                         help="variable d'environnement de la clé (par défaut : déduite de --provider-url)")
     parser.add_argument("--no-fallback", action="store_true",
@@ -89,10 +90,12 @@ def main():
         tache = SWEBenchTaskInput.model_validate(json.load(f))
 
     try:
-        client = creer_client_cli(args.provider_url, args.model_name, args.api_key_env)
+        config = charger_config()
+        provider_url = args.provider_url or config.fournisseur(config.default_provider).url
+        client = creer_client_cli(provider_url, args.model_name or config.default_model, args.api_key_env, config)
     except ValueError as e:
         sys.exit(f"Erreur de configuration : {e}")
-    secours = [] if args.no_fallback else creer_clients_secours(client)
+    secours = [] if args.no_fallback else creer_clients_secours(client, config)
 
     erreur = None
     reponse, steps, agent_succes = "", [], False

@@ -1,0 +1,24 @@
+{
+    "default_provider": "gemini",
+    "default_model": "gemini-3.6-flash",
+    "providers": [
+        {
+            "name": "groq",
+            "url": "https://api.groq.com/openai/v1",
+            "api_key_env": "GROQ_API_KEY",
+            "fallback_model": "openai/gpt-oss-120b"
+        },
+        {
+            "name": "openrouter",
+            "url": "https://openrouter.ai/api/v1",
+            "api_key_env": "OPENROUTER_API_KEY",
+            "fallback_model": "poolside/laguna-s-2.1:free"
+        },
+        {
+            "name": "gemini",
+            "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+            "api_key_env": "GEMINI_API_KEY",
+            "fallback_model": "gemini-3.6-flash"
+        }
+    ]
+}

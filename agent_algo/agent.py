@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from Extraction_llm import extraire_code
+from agent_algo.config import ModelsConfig, charger_config
 from models_public import StepMetrics
 from sandbox.protocol import ExecutionResult
 from sandbox.parent import Sandbox
@@ -44,49 +45,36 @@ Les variables sont conservees d'un tour a l'autre.
 Quand tu as la reponse finale, appelle final_answer(reponse) dans ton code,
 ou reponds SANS bloc ```python```, en commencant par "Final Answer:".
 """
-# Fournisseurs de secours, essayés dans cet ordre si le fournisseur choisi ne répond plus
-FOURNISSEUR = [
-    {"nom": "groq", "url": "https://api.groq.com/openai/v1/chat/completions",
-     "modele": "openai/gpt-oss-120b", "key_env": "GROQ_API_KEY"},
-    {"nom": "openrouter", "url": "https://openrouter.ai/api/v1/chat/completions",
-     "modele": "poolside/laguna-s-2.1:free", "key_env": "OPENROUTER_API_KEY"},
-    {"nom": "gemini", "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-     "modele": "gemini-3.6-flash", "key_env": "GEMINI_API_KEY"},
-]
+def url_chat(url: str) -> str:
+    """--provider-url et models.json donnent l'url de base, ClientLLM veut l'url complete"""
+    url = url.rstrip("/")
+    return url if url.endswith("/chat/completions") else url + "/chat/completions"
 
-def creer_client(index):
-    """créé un nv client LLM à partir de l'index dans la liste LLM"""
-    fournisseur = FOURNISSEUR[index]
-    nom_variable = fournisseur["key_env"]
-    api_key = os.getenv(nom_variable)
+
+def creer_client(index, config: ModelsConfig | None = None):
+    """créé un nv client LLM à partir de l'index du fournisseur dans models.json"""
+    fournisseur = (config or charger_config()).providers[index]
+    api_key = os.getenv(fournisseur.api_key_env)
     if not api_key:
-        raise ValueError(f"Clé API manquante pour {fournisseur['nom']}. Veuillez définir la variable d'environnement {nom_variable}.")
-    return ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key)
+        raise ValueError(f"Clé API manquante pour {fournisseur.name}. Veuillez définir la variable d'environnement {fournisseur.api_key_env}.")
+    return ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=api_key)
 
 
-# Variable d'environnement de la clé API, selon le domaine de l'URL du fournisseur
-KEY_ENV_BY_HOST = {
-    "api.groq.com": "GROQ_API_KEY",
-    "generativelanguage.googleapis.com": "GEMINI_API_KEY",
-    "openrouter.ai": "OPENROUTER_API_KEY",
-}
-
-
-def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None = None) -> "ClientLLM":
+def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
+                     config: ModelsConfig) -> "ClientLLM":
     """Crée le client LLM à partir des options --provider-url, --model-name et --api-key-env.
 
-    Sans --api-key-env, la variable de la clé est déduite du domaine de l'URL.
+    Sans --api-key-env, la variable de la clé est celle du fournisseur de models.json
+    qui a le même domaine que l'URL.
     """
-    # --provider-url est l'url de base, ClientLLM veut l'url complete
-    url = provider_url.rstrip("/")
-    if not url.endswith("/chat/completions"):
-        url += "/chat/completions"
-
+    url = url_chat(provider_url)
     if api_key_env is None:
-        host = urllib.parse.urlparse(url).hostname or ""
-        if host not in KEY_ENV_BY_HOST:
-            raise ValueError(f"Fournisseur inconnu ({host}) : indique la variable de la clé avec --api-key-env")
-        api_key_env = KEY_ENV_BY_HOST[host]
+        fournisseur = config.fournisseur_pour_url(url)
+        if fournisseur is None:
+            host = urllib.parse.urlparse(url).hostname or ""
+            raise ValueError(f"Fournisseur inconnu ({host}) : indique la variable de la clé "
+                             f"avec --api-key-env, ou ajoute le fournisseur dans models.json")
+        api_key_env = fournisseur.api_key_env
 
     api_key = os.getenv(api_key_env)
     if not api_key:
@@ -94,20 +82,21 @@ def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None = N
     return ClientLLM(adress=url, modele=modele, key=api_key)
 
 
-def creer_clients_secours(principal: "ClientLLM") -> list["ClientLLM"]:
-    """Les clients de secours, dans l'ordre de FOURNISSEUR.
+def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list["ClientLLM"]:
+    """Les clients de secours, dans l'ordre des fournisseurs de models.json.
 
     On saute le fournisseur du client principal (s'il est en panne, ses autres modèles
     aussi, en général) et ceux dont la clé manque : on les ignore ici, au lieu de
     planter au moment de basculer.
     """
+    host_principal = urllib.parse.urlparse(principal.adress).hostname
     secours = []
-    for fournisseur in FOURNISSEUR:
-        if fournisseur["url"] == principal.adress:
+    for fournisseur in config.providers:
+        if fournisseur.host == host_principal:
             continue
-        api_key = os.getenv(fournisseur["key_env"])
+        api_key = os.getenv(fournisseur.api_key_env)
         if api_key:
-            secours.append(ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key))
+            secours.append(ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=api_key))
     return secours
 
 def couper_observation_inventee(texte: str) -> str:
