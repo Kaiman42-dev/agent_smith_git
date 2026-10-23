@@ -26,11 +26,18 @@ class Provider(BaseModel):
         return urlparse(self.url).hostname or ""
 
 
+class BenchmarkModel(BaseModel):
+    provider: str  # nom d'un fournisseur de `providers`
+    model: str
+
+
 class ModelsConfig(BaseModel):
     # Utilisés quand --provider-url / --model-name ne sont pas donnés
     default_provider: str
     default_model: str
     providers: list[Provider]
+    # Modèles comparés dans BENCHMARK_REPORT.md (sujet : 5 modèles, 2 fournisseurs minimum)
+    benchmark_models: list[BenchmarkModel] = []
 
     @model_validator(mode="after")
     def verifier(self):
@@ -39,6 +46,9 @@ class ModelsConfig(BaseModel):
             raise ValueError(f"noms de fournisseurs en double : {noms}")
         if self.default_provider not in noms:
             raise ValueError(f"default_provider '{self.default_provider}' absent de providers {noms}")
+        inconnus = [m.provider for m in self.benchmark_models if m.provider not in noms]
+        if inconnus:
+            raise ValueError(f"benchmark_models : fournisseurs absents de providers {inconnus}")
         return self
 
     def fournisseur(self, nom: str) -> Provider:

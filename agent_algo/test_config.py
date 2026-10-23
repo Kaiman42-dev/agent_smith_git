@@ -39,6 +39,16 @@ def test_le_models_json_du_depot_est_valide():
     assert all(p.api_key_env.endswith("_API_KEY") for p in conf.providers)  # des noms, pas des clés
 
 
+def test_les_modeles_du_benchmark_respectent_le_sujet():
+    modeles = charger_config().benchmark_models
+    assert len(modeles) >= 5 and len({m.provider for m in modeles}) >= 2
+
+
+def test_fournisseur_du_benchmark_inconnu_refuse():
+    with pytest.raises(ValueError, match="benchmark_models"):
+        config(benchmark_models=[{"provider": "z", "model": "m"}])
+
+
 def test_default_provider_inconnu_refuse():
     with pytest.raises(ValueError, match="default_provider"):
         config(default_provider="z")
