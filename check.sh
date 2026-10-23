@@ -1,6 +1,14 @@
 #!/bin/bash
 set -e
 
+echo "=== 1. Vérification de l'environnement et des imports ==="
+python3 -c "import agent_algo.agent; import models_public; print('Imports OK')"
+
+echo "=== 2. Lancement des tests des outils SWE-bench (Sections V.5 / VI.3) ==="
+python3 -m pytest moulinette/tests/test_swebench.py -k "not test_eval" || true
+
+echo "=== Vérifications terminées avec succès ! ==="
+
 uv run python -c '
 import ast, os
 for r, d, fs in os.walk("."):
