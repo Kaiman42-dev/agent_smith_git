@@ -17,7 +17,7 @@ from pathlib import Path
 # permet d'importer Extraction_llm et outils/ qui sont a la racine du projet
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from Extraction_llm import p_mardown
+from Extraction_llm import extraire_code
 from models_public import StepMetrics
 from sandbox.protocol import ExecutionResult
 from sandbox.parent import Sandbox
@@ -307,7 +307,8 @@ class Agent:
             memoire.append({"role": "assistant", "content": contenu or "(empty reply)"}) # je sauvegarde la reponse du llm en mémoire
 
             # "Final Answer:" est prioritaire : le llm recopie parfois du code dans son raisonnement final
-            code = None if "Final Answer:" in contenu else p_mardown(contenu)  # parti code
+            # bloc python, ou appel XML / JSON / ReAct converti en python
+            code = None if "Final Answer:" in contenu else extraire_code(contenu)  # parti code
             observation = ""
             result = None
             if code is not None:
