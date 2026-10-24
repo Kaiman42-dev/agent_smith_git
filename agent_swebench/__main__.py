@@ -12,12 +12,22 @@ from pathlib import Path
 from dotenv import load_dotenv # type: ignore
 
 from agent_algo.agent import Agent, creer_client_cli, creer_clients_secours
+from agent_algo.config import charger_config
+from agent_algo.metriques import ecrire_metriques, metriques_du_run
 from mcp_bridge import build_manual, build_tools
 from mcp_client import SyncMcpClient
 from models_public import SWEBenchTaskInput, SolutionOutput
 from sandbox.parent import Sandbox
 
-MAX_TOURS = 30  # limite de la moulinette pour SWE-bench[cite: 27]
+# limites de la moulinette pour SWE-bench (sujet, VI.1)
+MAX_TOURS = 30
+MAX_INPUT_TOKENS = 300_000
+MAX_OUTPUT_TOKENS = 10_000
+TIMEOUT = 900
+# On s'arrête avant : un tour lancé juste avant l'heure limite peut encore appeler run_tests()
+# (jusqu'à 300 s, l'outil n'est pas soumis au timeout de la sandbox), puis il faut
+# supprimer le conteneur et écrire solution.json
+MARGE = 330
 
 # Our SWE-bench MCP server
 SWEBENCH_SERVER = Path(__file__).resolve().parent.parent / "mcp_tools_swebench.py"
@@ -58,6 +68,7 @@ def cleanup_container(signum=None, frame=None):
         sys.exit(1)
 
 def main():
+    fin = time.monotonic() + TIMEOUT - MARGE  # tout au début : le chrono de la moulinette tourne déjà
     # Gestion du SIGTERM envoyé par la moulinette[cite: 28]
     signal.signal(signal.SIGTERM, cleanup_container)
     signal.signal(signal.SIGINT, cleanup_container)
@@ -65,8 +76,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task-file", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--model-name", default="gemini-3.6-flash")
-    parser.add_argument("--provider-url", default="https://generativelanguage.googleapis.com/v1beta/openai")
+    parser.add_argument("--model-name", default=None, help="par défaut : default_model de models.json")
+    parser.add_argument("--provider-url", default=None, help="par défaut : url de default_provider de models.json")
     parser.add_argument("--api-key-env", default=None,
                         help="variable d'environnement de la clé (par défaut : déduite de --provider-url)")
     parser.add_argument("--no-fallback", action="store_true",
@@ -80,12 +91,15 @@ def main():
         tache = SWEBenchTaskInput.model_validate(json.load(f))
 
     try:
-        client = creer_client_cli(args.provider_url, args.model_name, args.api_key_env)
+        config = charger_config()
+        provider_url = args.provider_url or config.fournisseur(config.default_provider).url
+        client = creer_client_cli(provider_url, args.model_name or config.default_model, args.api_key_env, config)
     except ValueError as e:
         sys.exit(f"Erreur de configuration : {e}")
-    secours = [] if args.no_fallback else creer_clients_secours(client)
+    secours = [] if args.no_fallback else creer_clients_secours(client, config)
 
     erreur = None
+    agent = None
     reponse, steps, agent_succes = "", [], False
     system_prompt = PROMPT_SWEBENCH
     patch = ""
@@ -113,7 +127,9 @@ def main():
 
                 agent = Agent(question=question, max_tours=MAX_TOURS, client=client,
                               sandbox=sandbox, prompt_systeme=PROMPT_SWEBENCH,
-                              tools_manual=build_manual(mcp_client.list_tools()), secours=secours)
+                              tools_manual=build_manual(mcp_client.list_tools()), secours=secours,
+                              max_input_tokens=MAX_INPUT_TOKENS, max_output_tokens=MAX_OUTPUT_TOKENS,
+                              fin=fin)
                 
                 system_prompt = agent.prompt_systeme
                 reponse, steps = agent.agent_algo()
@@ -156,6 +172,7 @@ def main():
     
     with open(args.output, "w") as f:
         f.write(sortie.model_dump_json(indent=2))
+    ecrire_metriques(args.output, metriques_du_run(sortie, client, config, agent))  # pour le benchmark
         
     print(f"[*] Solution écrite dans {args.output} (succès={succes}, tours={len(steps)})")
 

@@ -17,7 +17,8 @@ from pathlib import Path
 # permet d'importer Extraction_llm et outils/ qui sont a la racine du projet
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from Extraction_llm import p_mardown
+from Extraction_llm import extraire_code
+from agent_algo.config import ModelsConfig, charger_config
 from models_public import StepMetrics
 from sandbox.protocol import ExecutionResult
 from sandbox.parent import Sandbox
@@ -44,49 +45,36 @@ Les variables sont conservees d'un tour a l'autre.
 Quand tu as la reponse finale, appelle final_answer(reponse) dans ton code,
 ou reponds SANS bloc ```python```, en commencant par "Final Answer:".
 """
-# Fournisseurs de secours, essayés dans cet ordre si le fournisseur choisi ne répond plus
-FOURNISSEUR = [
-    {"nom": "groq", "url": "https://api.groq.com/openai/v1/chat/completions",
-     "modele": "openai/gpt-oss-120b", "key_env": "GROQ_API_KEY"},
-    {"nom": "openrouter", "url": "https://openrouter.ai/api/v1/chat/completions",
-     "modele": "poolside/laguna-s-2.1:free", "key_env": "OPENROUTER_API_KEY"},
-    {"nom": "gemini", "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-     "modele": "gemini-3.6-flash", "key_env": "GEMINI_API_KEY"},
-]
+def url_chat(url: str) -> str:
+    """--provider-url et models.json donnent l'url de base, ClientLLM veut l'url complete"""
+    url = url.rstrip("/")
+    return url if url.endswith("/chat/completions") else url + "/chat/completions"
 
-def creer_client(index):
-    """créé un nv client LLM à partir de l'index dans la liste LLM"""
-    fournisseur = FOURNISSEUR[index]
-    nom_variable = fournisseur["key_env"]
-    api_key = os.getenv(nom_variable)
+
+def creer_client(index, config: ModelsConfig | None = None):
+    """créé un nv client LLM à partir de l'index du fournisseur dans models.json"""
+    fournisseur = (config or charger_config()).providers[index]
+    api_key = os.getenv(fournisseur.api_key_env)
     if not api_key:
-        raise ValueError(f"Clé API manquante pour {fournisseur['nom']}. Veuillez définir la variable d'environnement {nom_variable}.")
-    return ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key)
+        raise ValueError(f"Clé API manquante pour {fournisseur.name}. Veuillez définir la variable d'environnement {fournisseur.api_key_env}.")
+    return ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=api_key)
 
 
-# Variable d'environnement de la clé API, selon le domaine de l'URL du fournisseur
-KEY_ENV_BY_HOST = {
-    "api.groq.com": "GROQ_API_KEY",
-    "generativelanguage.googleapis.com": "GEMINI_API_KEY",
-    "openrouter.ai": "OPENROUTER_API_KEY",
-}
-
-
-def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None = None) -> "ClientLLM":
+def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
+                     config: ModelsConfig) -> "ClientLLM":
     """Crée le client LLM à partir des options --provider-url, --model-name et --api-key-env.
 
-    Sans --api-key-env, la variable de la clé est déduite du domaine de l'URL.
+    Sans --api-key-env, la variable de la clé est celle du fournisseur de models.json
+    qui a le même domaine que l'URL.
     """
-    # --provider-url est l'url de base, ClientLLM veut l'url complete
-    url = provider_url.rstrip("/")
-    if not url.endswith("/chat/completions"):
-        url += "/chat/completions"
-
+    url = url_chat(provider_url)
     if api_key_env is None:
-        host = urllib.parse.urlparse(url).hostname or ""
-        if host not in KEY_ENV_BY_HOST:
-            raise ValueError(f"Fournisseur inconnu ({host}) : indique la variable de la clé avec --api-key-env")
-        api_key_env = KEY_ENV_BY_HOST[host]
+        fournisseur = config.fournisseur_pour_url(url)
+        if fournisseur is None:
+            host = urllib.parse.urlparse(url).hostname or ""
+            raise ValueError(f"Fournisseur inconnu ({host}) : indique la variable de la clé "
+                             f"avec --api-key-env, ou ajoute le fournisseur dans models.json")
+        api_key_env = fournisseur.api_key_env
 
     api_key = os.getenv(api_key_env)
     if not api_key:
@@ -94,20 +82,21 @@ def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None = N
     return ClientLLM(adress=url, modele=modele, key=api_key)
 
 
-def creer_clients_secours(principal: "ClientLLM") -> list["ClientLLM"]:
-    """Les clients de secours, dans l'ordre de FOURNISSEUR.
+def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list["ClientLLM"]:
+    """Les clients de secours, dans l'ordre des fournisseurs de models.json.
 
     On saute le fournisseur du client principal (s'il est en panne, ses autres modèles
     aussi, en général) et ceux dont la clé manque : on les ignore ici, au lieu de
     planter au moment de basculer.
     """
+    host_principal = urllib.parse.urlparse(principal.adress).hostname
     secours = []
-    for fournisseur in FOURNISSEUR:
-        if fournisseur["url"] == principal.adress:
+    for fournisseur in config.providers:
+        if fournisseur.host == host_principal:
             continue
-        api_key = os.getenv(fournisseur["key_env"])
+        api_key = os.getenv(fournisseur.api_key_env)
         if api_key:
-            secours.append(ClientLLM(adress=fournisseur["url"], modele=fournisseur["modele"], key=api_key))
+            secours.append(ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=api_key))
     return secours
 
 def couper_observation_inventee(texte: str) -> str:
@@ -131,6 +120,36 @@ def format_observation(result: ExecutionResult) -> str:
         
     return observation[:MAX_OBSERVATION]
 
+def compter_tokens(usage: dict) -> tuple[int, int]:
+    """(entrée, sortie) d'après le champ usage de la réponse.
+
+    Gemini ne compte pas sa réflexion cachée dans completion_tokens, mais bien dans
+    total_tokens : la sortie est donc tout ce qui a été généré en plus de l'entrée.
+    Groq et OpenRouter l'incluent déjà, le max ne change rien pour eux.
+    """
+    entree = usage.get("prompt_tokens") or 0
+    sortie = usage.get("completion_tokens") or 0
+    total = usage.get("total_tokens") or 0
+    return entree, max(sortie, total - entree)
+
+
+def generation_refusee(erreur: urllib.error.HTTPError) -> str | None:
+    """Le texte du modèle quand le fournisseur a refusé son appel d'outil natif, sinon None.
+
+    Sans outil déclaré dans la requête, Groq refuse un appel d'outil natif avec
+    400 "tool_use_failed", mais renvoie ce que le modèle a écrit dans failed_generation
+    (ex. {"name": "run_tests", "arguments": {...}}). Extraction_llm sait le convertir en Python.
+    """
+    try:
+        corps = json.loads(erreur.read())
+    except (ValueError, OSError):
+        return None
+    detail = corps.get("error") if isinstance(corps, dict) else None
+    if isinstance(detail, dict) and detail.get("code") == "tool_use_failed":
+        return detail.get("failed_generation") or None
+    return None
+
+
 class ClientLLM:
     def __init__(self, adress, modele, key):
         self.adress = adress
@@ -142,12 +161,18 @@ class ClientLLM:
         self.temps_ms = 0.0
         self.retries = 0
         self.total_requetes = 0  # toutes les requetes envoyees, retries compris
+        self.erreurs = []  # erreurs du dernier appel ("503", "timeout"...), pour les metriques du benchmark
 
-    def appel_llm(self, messages):
-        """Envoie la conversation au modèle et renvoie son message de réponse"""
-        corps = json.dumps(
-            {"model": self.modele, "messages": messages, "stream": False }
-        ).encode()
+    def appel_llm(self, messages, max_tokens=None, fin=None):
+        """Envoie la conversation au modèle et renvoie son message de réponse.
+
+        max_tokens : nombre maximal de tokens que le modèle peut générer (budget restant).
+        fin : heure limite (time.monotonic()) ; aucun essai ni aucune attente ne la dépasse.
+        """
+        options = {"model": self.modele, "messages": messages, "stream": False}
+        if max_tokens is not None:
+            options["max_tokens"] = max_tokens
+        corps = json.dumps(options).encode()
         requete = urllib.request.Request(
             self.adress, data=corps,
             headers={
@@ -157,21 +182,35 @@ class ClientLLM:
                 "User-Agent": "agent-smith/0.1",
             },
         )
+        self.erreurs = []
         i = 0
         while i <= 5:
+            reste = None if fin is None else fin - time.monotonic()
+            if reste is not None and reste < 1:
+                logging.error("Plus de temps pour appeler le LLM (limite de temps de la tâche).")
+                return None, None
             self.retries = i
             self.total_requetes += 1
             debut = time.perf_counter()
             try:
-                with urllib.request.urlopen(requete, timeout=40) as response: #envoie la requete au serveur
+                with urllib.request.urlopen(requete, timeout=min(40, reste or 40)) as response: #envoie la requete au serveur
                     reponse = json.load(response)
                 self.temps_ms = (time.perf_counter() - debut) * 1000
-                usage = reponse.get("usage") or {}  # nombre de tokens renvoye par l'API
-                self.input_tokens = usage.get("prompt_tokens", 0)
-                self.output_tokens = usage.get("completion_tokens", 0)
+                # nombre de tokens renvoye par l'API
+                self.input_tokens, self.output_tokens = compter_tokens(reponse.get("usage") or {})
                 return reponse["choices"][0]["message"], None # retourne la reponse du serveur
             except urllib.error.HTTPError as e:
                 logging.error(f"Echec HTTP. Code {e.code}, Raison {e.reason}")
+                self.erreurs.append(str(e.code))
+                generation = generation_refusee(e) if e.code == 400 else None
+                if generation is not None:
+                    logging.warning("Appel d'outil natif refusé par le fournisseur : on garde le texte généré.")
+                    self.temps_ms = (time.perf_counter() - debut) * 1000
+                    # l'erreur ne donne pas l'usage : estimation prudente (~1 token pour 3 caractères,
+                    # comme raison_arret) pour que les limites de tokens restent respectées
+                    self.input_tokens = taille(messages) // 3
+                    self.output_tokens = len(generation) // 3
+                    return {"role": "assistant", "content": generation}, None
                 if e.code == 429:
                     logging.error("Trop de requetes (429) : on passe au fournisseur suivant.")
                     return None, e.code
@@ -182,36 +221,49 @@ class ClientLLM:
                     return None, e.code
                 attente = e.headers.get("Retry-After") if e.headers else None  # le serveur peut dire combien attendre
                 i = i + 1
-                self.attendre(i, attente)
+                self.attendre(i, attente, fin)
             except urllib.error.URLError as e:
                 logging.error(f"Echec URL. Raison {e.reason}")
+                self.erreurs.append(f"url: {e.reason}")
                 i = i + 1
-                self.attendre(i)
+                self.attendre(i, fin=fin)
             except TimeoutError as e:
                 logging.error(f"Timeout. Raison {e}")
+                self.erreurs.append("timeout")
                 i = i + 1
-                self.attendre(i)
+                self.attendre(i, fin=fin)
         return None, None  # si on a fait 5 essais sans succes, on renvoie None
 
 
-    def attendre(self, essai, attente=None):
-        """attend avant de reessayer : 1s, 2s, 4s, 8s... (ou ce que demande le serveur), max 20s"""
+    def attendre(self, essai, attente=None, fin=None):
+        """attend avant de reessayer : 1s, 2s, 4s, 8s... (ou ce que demande le serveur), max 20s,
+        et jamais au-delà de l'heure limite"""
         if essai > 5:  # plus d'essai apres, inutile d'attendre
             return
         try:
             secondes = float(attente)
         except (TypeError, ValueError):
             secondes = 2 ** (essai - 1)
+        if fin is not None:
+            secondes = min(secondes, max(0, fin - time.monotonic()))
         time.sleep(min(secondes, 20))
+
+
+def taille(memoire) -> int:
+    """Nombre de caractères de la conversation (sert à estimer les tokens du prochain appel)."""
+    return sum(len(m["content"]) for m in memoire)
 
 
 class Agent:
     def __init__(self, question, max_tours, client, sandbox: Sandbox,
                  prompt_systeme=PROMPT_SYSTEME, tools_manual: str = "",
-                 secours: list | None = None):
+                 secours: list | None = None, max_input_tokens: int | None = None,
+                 max_output_tokens: int | None = None, fin: float | None = None):
         """sandbox: created by the caller, who chooses its MCP tools.
         tools_manual: tool documentation appended to the system prompt.
-        secours: clients LLM de secours, essayés dans l'ordre si le client actuel ne répond plus."""
+        secours: clients LLM de secours, essayés dans l'ordre si le client actuel ne répond plus.
+        max_input_tokens, max_output_tokens : budget de tokens pour toute la tâche (sujet, VI.1).
+        fin : heure limite de la tâche (time.monotonic()). None = pas de limite."""
         self.question = question
         self.max_tours = max_tours
         self.client = client
@@ -221,21 +273,55 @@ class Agent:
             self.prompt_systeme += "\n\n" + tools_manual
         self.succes = False  # passe a True si le llm donne une reponse finale
         self.secours = list(secours or [])  # copie : on la vide au fur et à mesure des bascules
+        self.max_input_tokens = max_input_tokens
+        self.max_output_tokens = max_output_tokens
+        self.fin = fin
+        self.taille_dernier_envoi = 0  # caractères envoyés au dernier appel
+        # pour les metriques du benchmark (agent_algo/metriques.py) : ce que solution.json ne garde pas
+        self.tour = 0
+        self.incidents = []  # erreurs des fournisseurs : {"step", "model", "error"}
+        self.bascules = []   # changements de fournisseur : {"step", "from", "to", "code"}
 
 
-    def appeler_llm(self, memoire):
+    def temps_ecoule(self) -> bool:
+        return self.fin is not None and time.monotonic() >= self.fin
+
+
+    def raison_arret(self, steps, memoire) -> str | None:
+        """Avant chaque appel au LLM : pourquoi il faut s'arrêter, ou None s'il reste du budget."""
+        if self.temps_ecoule():
+            return "limite de temps atteinte"
+        sortie = sum(s.output_tokens for s in steps)
+        if self.max_output_tokens is not None and sortie >= self.max_output_tokens:
+            return f"limite de tokens de sortie atteinte ({sortie}/{self.max_output_tokens})"
+        if self.max_input_tokens is not None and steps:
+            # chaque appel renvoie toute la conversation : le prochain coûtera autant que le
+            # dernier, plus ce qu'on a ajouté depuis (environ 1 token pour 3 caractères)
+            prochain = steps[-1].input_tokens + (taille(memoire) - self.taille_dernier_envoi) // 3
+            entree = sum(s.input_tokens for s in steps)
+            if entree + prochain > self.max_input_tokens:
+                return (f"limite de tokens d'entrée atteinte ({entree} utilisés, "
+                        f"~{prochain} pour le prochain appel, limite {self.max_input_tokens})")
+        return None
+
+
+    def appeler_llm(self, memoire, max_tokens=None):
         """Appelle le LLM ; si le fournisseur ne répond plus, bascule sur le client de secours suivant.
 
         Renvoie (message, None), ou (None, code_erreur) quand plus aucun fournisseur ne répond.
         """
         while True:
-            message, code_erreur = self.client.appel_llm(memoire)
+            message, code_erreur = self.client.appel_llm(memoire, max_tokens=max_tokens, fin=self.fin)
+            self.incidents += [{"step": self.tour, "model": self.client.modele, "error": e}
+                               for e in self.client.erreurs]
             if message is not None:
                 return message, None
-            # 400/404 : notre requête est fausse (modèle inconnu...), changer de fournisseur n'y changera rien
-            if code_erreur in (400, 404) or not self.secours:
+            # 400/404 : notre requête est fausse (modèle inconnu...), changer de fournisseur n'y changera rien.
+            # Temps écoulé : un autre fournisseur n'aurait pas plus de temps.
+            if code_erreur in (400, 404) or not self.secours or self.temps_ecoule():
                 return None, code_erreur
             ancien, self.client = self.client, self.secours.pop(0)
+            self.bascules.append({"step": self.tour, "from": ancien.modele, "to": self.client.modele, "code": code_erreur})
             logging.warning(f"{ancien.modele} indisponible (code {code_erreur}), bascule sur {self.client.modele}")
 
 
@@ -248,8 +334,17 @@ class Agent:
         steps: list[StepMetrics] = []  # une fiche par tour, pour solution.json
 
         for tour in range(1, self.max_tours + 1):
-            message, code_erreur = self.appeler_llm(memoire) # parti de thinking
+            self.tour = tour
+            raison = self.raison_arret(steps, memoire)  # on vérifie le budget AVANT de dépenser
+            if raison:
+                return f"Arret de l'agent : {raison}.", steps
+            self.taille_dernier_envoi = taille(memoire)
+            restant = None if self.max_output_tokens is None else \
+                self.max_output_tokens - sum(s.output_tokens for s in steps)
+            message, code_erreur = self.appeler_llm(memoire, restant) # parti de thinking
             if message is None:  # plus aucun fournisseur ne repond : on arrete
+                if self.temps_ecoule():
+                    return "Arret de l'agent : limite de temps atteinte pendant l'appel au LLM.", steps
                 return f"Le LLM ne répond plus (dernier code : {code_erreur}), arret de l'agent.", steps
             brut = message.get("content") or ""
             contenu = couper_observation_inventee(brut)  # on garde seulement ce qui précède l'observation inventée
@@ -257,7 +352,8 @@ class Agent:
             memoire.append({"role": "assistant", "content": contenu or "(empty reply)"}) # je sauvegarde la reponse du llm en mémoire
 
             # "Final Answer:" est prioritaire : le llm recopie parfois du code dans son raisonnement final
-            code = None if "Final Answer:" in contenu else p_mardown(contenu)  # parti code
+            # bloc python, ou appel XML / JSON / ReAct converti en python
+            code = None if "Final Answer:" in contenu else extraire_code(contenu)  # parti code
             observation = ""
             result = None
             if code is not None:
