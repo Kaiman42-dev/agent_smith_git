@@ -23,6 +23,10 @@ from models_public import StepMetrics
 from sandbox.protocol import ExecutionResult
 from sandbox.parent import Sandbox
 
+# 429 sans fournisseur de secours : nombre maximal d'attentes sur toute la tâche (AS-43).
+# Gemini gratuit n'accepte que 5 requêtes par minute : une tâche SWE-bench de 30 tours peut en demander beaucoup
+MAX_ATTENTES_QUOTA = 30
+
 MAX_OBSERVATION = 5000  # sert a couper les observations trop longues pour ne pas exploser le contexte
 
 # Added to the next observation when the LLM's reply had to be cut
@@ -133,6 +137,34 @@ def compter_tokens(usage: dict) -> tuple[int, int]:
     return entree, max(sortie, total - entree)
 
 
+UNITES = {"h": 3600, "m": 60, "s": 1, "ms": 0.001, "": 1}
+
+
+def en_secondes(texte: str | None) -> float | None:
+    """Durées des fournisseurs en secondes : "49.06s", "1m2.5s", "120ms", "7" ; None si illisible."""
+    morceaux = re.findall(r"(\d+(?:\.\d+)?)(ms|h|m|s)?", texte or "")
+    return sum(float(n) * UNITES[u] for n, u in morceaux) if morceaux else None
+
+
+def delai_quota(erreur: urllib.error.HTTPError) -> float | None:
+    """Combien attendre après un 429, d'après le fournisseur (AS-43).
+
+    Groq : en-tête Retry-After, ou x-ratelimit-reset-tokens ("39.877s").
+    Gemini : rien dans les en-têtes, mais "retryDelay": "49s" (ou "retry in 49.06s") dans le corps.
+    """
+    entetes = erreur.headers or {}
+    if entetes.get("Retry-After"):
+        return en_secondes(entetes.get("Retry-After"))
+    try:
+        corps = erreur.read().decode(errors="replace")
+    except OSError:
+        corps = ""
+    m = re.search(r'"retryDelay"\s*:\s*"([^"]+)"', corps) or re.search(r"retry in ([\d.]+\s*m?s)", corps)
+    if m:
+        return en_secondes(m.group(1))
+    return en_secondes(entetes.get("x-ratelimit-reset-tokens"))
+
+
 def generation_refusee(erreur: urllib.error.HTTPError) -> str | None:
     """Le texte du modèle quand le fournisseur a refusé son appel d'outil natif, sinon None.
 
@@ -162,6 +194,7 @@ class ClientLLM:
         self.retries = 0
         self.total_requetes = 0  # toutes les requetes envoyees, retries compris
         self.erreurs = []  # erreurs du dernier appel ("503", "timeout"...), pour les metriques du benchmark
+        self.attente_quota = None  # apres un 429 : secondes a attendre selon le fournisseur (None = inconnu)
 
     def appel_llm(self, messages, max_tokens=None, fin=None):
         """Envoie la conversation au modèle et renvoie son message de réponse.
@@ -183,6 +216,7 @@ class ClientLLM:
             },
         )
         self.erreurs = []
+        self.attente_quota = None
         i = 0
         while i <= 5:
             reste = None if fin is None else fin - time.monotonic()
@@ -212,7 +246,9 @@ class ClientLLM:
                     self.output_tokens = len(generation) // 3
                     return {"role": "assistant", "content": generation}, None
                 if e.code == 429:
-                    logging.error("Trop de requetes (429) : on passe au fournisseur suivant.")
+                    # l'agent decide : basculer sur un secours, ou attendre que le quota se recharge
+                    self.attente_quota = delai_quota(e)
+                    logging.error(f"Trop de requetes (429), quota recharge dans {self.attente_quota} s.")
                     return None, e.code
                 # Erreurs définitives, réessayer ne changera rien :
                 # 400/404 = requête fausse (modèle inconnu...), 401/403 = clé refusée ou accès interdit
@@ -281,6 +317,7 @@ class Agent:
         self.tour = 0
         self.incidents = []  # erreurs des fournisseurs : {"step", "model", "error"}
         self.bascules = []   # changements de fournisseur : {"step", "from", "to", "code"}
+        self.attentes_quota = 0  # attentes après un 429 sans secours, sur toute la tâche (AS-43)
 
 
     def temps_ecoule(self) -> bool:
@@ -305,6 +342,24 @@ class Agent:
         return None
 
 
+    def attendre_quota(self) -> bool:
+        """Attend que le quota du client se recharge (429). False si le temps restant ne le permet pas
+        ou si on a déjà trop attendu : l'agent s'arrête alors proprement."""
+        if self.attentes_quota >= MAX_ATTENTES_QUOTA:
+            return False
+        # sans délai donné par le fournisseur : 5 s, 10 s, 20 s... (60 s maximum)
+        delai = self.client.attente_quota
+        if delai is None:
+            delai = min(5 * 2 ** self.attentes_quota, 60)
+        delai += 1  # marge : le quota se recharge parfois une fraction de seconde après l'heure annoncée
+        if self.fin is not None and time.monotonic() + delai >= self.fin:
+            return False
+        self.attentes_quota += 1
+        logging.warning(f"Quota de {self.client.modele} dépassé : attente de {delai:.0f} s.")
+        time.sleep(delai)
+        return True
+
+
     def appeler_llm(self, memoire, max_tokens=None):
         """Appelle le LLM ; si le fournisseur ne répond plus, bascule sur le client de secours suivant.
 
@@ -318,7 +373,12 @@ class Agent:
                 return message, None
             # 400/404 : notre requête est fausse (modèle inconnu...), changer de fournisseur n'y changera rien.
             # Temps écoulé : un autre fournisseur n'aurait pas plus de temps.
-            if code_erreur in (400, 404) or not self.secours or self.temps_ecoule():
+            if code_erreur in (400, 404) or self.temps_ecoule():
+                return None, code_erreur
+            if not self.secours:
+                # plus de secours (ou --no-fallback) : sur un quota dépassé, attendre qu'il se recharge
+                if code_erreur == 429 and self.attendre_quota():
+                    continue
                 return None, code_erreur
             ancien, self.client = self.client, self.secours.pop(0)
             self.bascules.append({"step": self.tour, "from": ancien.modele, "to": self.client.modele, "code": code_erreur})
