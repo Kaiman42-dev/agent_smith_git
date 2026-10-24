@@ -1,26 +1,26 @@
-from pathlib import Path
-import os
 import ast
-import re
+
+from outils import testbed
+
+# Les recherches ne parcourent que le dépôt (TESTBED_PATH), liens symboliques compris (AS-41)
 
 
  # Cherche un mot precis dans un fichier (file_pattern pour chercher dans des fichier precis *.py, *.txt)
 def search_code(pattern, file_pattern):
-    testbed = os.environ.get("TESTBED_PATH", "./testbed")
-    dossier = Path(testbed)
-    
-    if not dossier.exists():
-        return f"Erreur : le dossier {testbed} n'existe pas."
+    try:
+        dossier = testbed.racine()
+    except PermissionError as err:
+        return f"Error: {err}"
     res = []
     try:
         for f in dossier.rglob(file_pattern):
-            if f.is_file():
+            if f.is_file() and testbed.dans_le_depot(f, dossier):
                 try:
                     with f.open("r", encoding="utf-8") as fichier:
                         for nbr_ligne, ligne in enumerate(fichier, start=1):
                             if pattern in ligne:
                                 contenu = ligne.rstrip('\r\n')
-                                res.append(f"{f.absolute()}:{nbr_ligne} {contenu}")
+                                res.append(f"{testbed.chemin_affiche(f)}:{nbr_ligne} {contenu}")
                 except UnicodeDecodeError:
                     pass
         return "\n".join(res) if res else "no results"
@@ -31,16 +31,15 @@ def search_code(pattern, file_pattern):
 
 # cherher une fonction ou class precis
 def search_function_or_class_definition_in_code(name):
-    testbed = os.environ.get("TESTBED_PATH", "./testbed")
-    dossier = Path(testbed)
+    try:
+        dossier = testbed.racine()
+    except PermissionError as err:
+        return f"Error: {err}"
     
-    if not dossier.exists():
-        return f"Error: directory {testbed} does not exist."
-        
     results = []
     try:
         for filepath in dossier.rglob("*.py"):
-            if filepath.is_file():
+            if filepath.is_file() and testbed.dans_le_depot(filepath, dossier):
                 with open(filepath, 'r', encoding="utf-8") as file_obj:
                     res = file_obj.read()
                     try:
@@ -52,7 +51,7 @@ def search_function_or_class_definition_in_code(name):
                             numero_ligne = node.lineno
                             lines = res.splitlines()
                             line_content = lines[numero_ligne - 1].strip()
-                            results.append(f"{filepath.absolute()}:{numero_ligne} {line_content}")
+                            results.append(f"{testbed.chemin_affiche(filepath)}:{numero_ligne} {line_content}")
                             
         return "\n".join(results) if results else "No results found."
         
@@ -62,13 +61,15 @@ def search_function_or_class_definition_in_code(name):
 
 #Cherche tous les appels d'une fonction precis
 def find_references(name, filepath, line):
-    testbed = os.environ.get("TESTBED_PATH", "./testbed")
-    dossier = Path(testbed)
-    if not dossier.exists():
-        return "Error"
+    try:
+        dossier = testbed.racine()
+    except PermissionError as err:
+        return f"Error: {err}"
     results = []
     try:
         for current_filepath in dossier.rglob("*.py"):
+            if not (current_filepath.is_file() and testbed.dans_le_depot(current_filepath, dossier)):
+                continue
             with open(current_filepath, 'r', encoding="utf-8") as file_obj:
                 res = file_obj.read()
                 try:
@@ -86,7 +87,7 @@ def find_references(name, filepath, line):
                         if numero_ligne is not None:
                             lines = res.splitlines()
                             line_content = lines[numero_ligne - 1].strip()
-                            formatted_result = f"{current_filepath.absolute()}:{numero_ligne} {line_content}"
+                            formatted_result = f"{testbed.chemin_affiche(current_filepath)}:{numero_ligne} {line_content}"
                             if formatted_result not in results:
                                 results.append(formatted_result)
         if results:
@@ -94,7 +95,7 @@ def find_references(name, filepath, line):
         else:
             return "no result"
     except Exception as e:
-        return "Error {e}"
+        return f"Error {e}"
 
 
 """
