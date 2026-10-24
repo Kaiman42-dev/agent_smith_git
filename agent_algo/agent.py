@@ -1,4 +1,5 @@
 import json
+import math
 import re
 import time
 import urllib.request
@@ -55,13 +56,27 @@ def url_chat(url: str) -> str:
     return url if url.endswith("/chat/completions") else url + "/chat/completions"
 
 
+def cles_api(nom_variable: str) -> list[str]:
+    """Toutes les clés d'un fournisseur (AS-33) : NOM, puis NOM_1, NOM_2... (dans cet ordre).
+    Chaque variable peut aussi contenir plusieurs clés séparées par des virgules."""
+    motif = re.compile(rf"{re.escape(nom_variable)}(?:_(\d+))?")
+    noms = [n for n in os.environ if motif.fullmatch(n)]
+    noms.sort(key=lambda n: int(motif.fullmatch(n).group(1) or 0))
+    cles = []
+    for nom in noms:
+        for cle in os.environ[nom].split(","):
+            if cle.strip() and cle.strip() not in cles:
+                cles.append(cle.strip())
+    return cles
+
+
 def creer_client(index, config: ModelsConfig | None = None):
     """créé un nv client LLM à partir de l'index du fournisseur dans models.json"""
     fournisseur = (config or charger_config()).providers[index]
-    api_key = os.getenv(fournisseur.api_key_env)
-    if not api_key:
+    cles = cles_api(fournisseur.api_key_env)
+    if not cles:
         raise ValueError(f"Clé API manquante pour {fournisseur.name}. Veuillez définir la variable d'environnement {fournisseur.api_key_env}.")
-    return ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=api_key)
+    return ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles)
 
 
 def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
@@ -80,10 +95,10 @@ def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
                              f"avec --api-key-env, ou ajoute le fournisseur dans models.json")
         api_key_env = fournisseur.api_key_env
 
-    api_key = os.getenv(api_key_env)
-    if not api_key:
+    cles = cles_api(api_key_env)
+    if not cles:
         raise ValueError(f"Clé API manquante : la variable d'environnement {api_key_env} n'est pas définie")
-    return ClientLLM(adress=url, modele=modele, key=api_key)
+    return ClientLLM(adress=url, modele=modele, key=cles)
 
 
 def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list["ClientLLM"]:
@@ -98,9 +113,9 @@ def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list[
     for fournisseur in config.providers:
         if fournisseur.host == host_principal:
             continue
-        api_key = os.getenv(fournisseur.api_key_env)
-        if api_key:
-            secours.append(ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=api_key))
+        cles = cles_api(fournisseur.api_key_env)
+        if cles:
+            secours.append(ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles))
     return secours
 
 def couper_observation_inventee(texte: str) -> str:
@@ -184,9 +199,13 @@ def generation_refusee(erreur: urllib.error.HTTPError) -> str | None:
 
 class ClientLLM:
     def __init__(self, adress, modele, key):
+        """key : une clé, ou la liste des clés du fournisseur, utilisées à tour de rôle (AS-33)."""
         self.adress = adress
         self.modele = modele
-        self.key = key
+        self.cles = [key] if isinstance(key, str) else list(key)
+        self.indice_cle = 0
+        # heure (time.monotonic()) à partir de laquelle chaque clé peut resservir ; inf = clé refusée
+        self.cle_disponible = [0.0] * len(self.cles)
         # metriques du dernier appel (lues par l'agent pour remplir solution.json)
         self.input_tokens = 0
         self.output_tokens = 0
@@ -195,6 +214,40 @@ class ClientLLM:
         self.total_requetes = 0  # toutes les requetes envoyees, retries compris
         self.erreurs = []  # erreurs du dernier appel ("503", "timeout"...), pour les metriques du benchmark
         self.attente_quota = None  # apres un 429 : secondes a attendre selon le fournisseur (None = inconnu)
+
+    @property
+    def key(self) -> str:
+        """La clé utilisée en ce moment."""
+        return self.cles[self.indice_cle]
+
+    def changer_de_cle(self, indisponible_pendant: float) -> bool:
+        """Met la clé actuelle de côté (pendant `indisponible_pendant` secondes, inf = pour toujours)
+        et prend la suivante qui est disponible. False s'il n'y en a aucune en ce moment."""
+        maintenant = time.monotonic()
+        self.cle_disponible[self.indice_cle] = maintenant + indisponible_pendant
+        for decalage in range(1, len(self.cles)):
+            j = (self.indice_cle + decalage) % len(self.cles)
+            if self.cle_disponible[j] <= maintenant:
+                self.indice_cle = j
+                logging.warning(f"{self.modele} : passage à la clé {j + 1}/{len(self.cles)}.")  # jamais la clé elle-même
+                return True
+        return False
+
+    def prochaine_cle_dans(self) -> float | None:
+        """Secondes avant qu'une clé soit de nouveau disponible (0 si l'une l'est), None si toutes sont refusées."""
+        prochaine = min(self.cle_disponible) - time.monotonic()
+        return None if prochaine == math.inf else max(0.0, prochaine)
+
+    def requete(self, corps: bytes) -> urllib.request.Request:
+        return urllib.request.Request(
+            self.adress, data=corps,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.key}",  # c'est ce qui est envoyé a l'API, avec la clé
+                # Cloudflare (devant Groq) refuse l'identifiant par défaut "Python-urllib" : erreur 403
+                "User-Agent": "agent-smith/0.1",
+            },
+        )
 
     def appel_llm(self, messages, max_tokens=None, fin=None):
         """Envoie la conversation au modèle et renvoie son message de réponse.
@@ -206,19 +259,15 @@ class ClientLLM:
         if max_tokens is not None:
             options["max_tokens"] = max_tokens
         corps = json.dumps(options).encode()
-        requete = urllib.request.Request(
-            self.adress, data=corps,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.key}",  # c'est ce qui est envoyé a l'API, avec la clé
-                # Cloudflare (devant Groq) refuse l'identifiant par défaut "Python-urllib" : erreur 403
-                "User-Agent": "agent-smith/0.1",
-            },
-        )
+        # la clé actuelle a pu être mise de côté au dernier appel : reprendre celle qui se libère en premier
+        if self.cle_disponible[self.indice_cle] > time.monotonic():
+            self.indice_cle = self.cle_disponible.index(min(self.cle_disponible))
         self.erreurs = []
         self.attente_quota = None
+        rotations = 0  # changements de clé pendant cet appel : au plus une fois chaque clé
         i = 0
         while i <= 5:
+            requete = self.requete(corps)  # reconstruite à chaque essai : la clé a pu changer
             reste = None if fin is None else fin - time.monotonic()
             if reste is not None and reste < 1:
                 logging.error("Plus de temps pour appeler le LLM (limite de temps de la tâche).")
@@ -246,10 +295,21 @@ class ClientLLM:
                     self.output_tokens = len(generation) // 3
                     return {"role": "assistant", "content": generation}, None
                 if e.code == 429:
-                    # l'agent decide : basculer sur un secours, ou attendre que le quota se recharge
-                    self.attente_quota = delai_quota(e)
-                    logging.error(f"Trop de requetes (429), quota recharge dans {self.attente_quota} s.")
+                    delai = delai_quota(e)
+                    logging.error(f"Trop de requetes (429), quota recharge dans {delai} s.")
+                    # AS-33 : une autre clé du même fournisseur avant de changer de fournisseur ;
+                    # sans délai annoncé, la clé est mise de côté une minute
+                    if rotations < len(self.cles) - 1 and self.changer_de_cle(delai or 60):
+                        rotations += 1
+                        continue
+                    self.cle_disponible[self.indice_cle] = time.monotonic() + (delai or 60)
+                    # l'agent decide : basculer sur un secours, ou attendre la premiere cle qui se libere
+                    self.attente_quota = self.prochaine_cle_dans() if len(self.cles) > 1 else delai
                     return None, e.code
+                # 401/403 : cette clé est refusée, une autre clé du fournisseur peut marcher
+                if e.code in (401, 403) and rotations < len(self.cles) - 1 and self.changer_de_cle(math.inf):
+                    rotations += 1
+                    continue
                 # Erreurs définitives, réessayer ne changera rien :
                 # 400/404 = requête fausse (modèle inconnu...), 401/403 = clé refusée ou accès interdit
                 if e.code in (400, 401, 403, 404):
