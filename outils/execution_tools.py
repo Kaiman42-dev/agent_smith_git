@@ -1,18 +1,13 @@
-import os
 import subprocess
 
-def _executer_commande(cmd: str, workdir: str, timeout: int) -> subprocess.CompletedProcess:
-    container_id = os.environ.get("CONTAINER_ID")
-    if container_id:
-        docker_cmd = ["docker", "exec", "-w", workdir, container_id, "bash", "-c", cmd]
-        return subprocess.run(docker_cmd, capture_output=True, text=True, timeout=timeout)
-    else:
-        return subprocess.run(cmd, shell=True, cwd=workdir, capture_output=True, text=True, timeout=timeout)
+from outils import testbed
+
+# Les commandes tournent dans le conteneur de la tâche, ou dans TESTBED_PATH pendant
+# les tests isolés : jamais ailleurs sur l'hôte (voir outils/testbed.py)
 
 def run_tests(eval_script_path="eval.sh"):
-    testbed_path = os.environ.get("TESTBED_PATH", "/testbed")
     try:
-        result = _executer_commande(f"bash {eval_script_path}", testbed_path, 300)
+        result = testbed.executer(f"bash {eval_script_path}", None, 300)
         return f"Exit code: {result.returncode}\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
     except subprocess.TimeoutExpired:
         return "Error: Timeout after 300 seconds."
@@ -20,18 +15,15 @@ def run_tests(eval_script_path="eval.sh"):
         return f"Error: {err}"
 
 def get_patch():
-    testbed_path = os.environ.get("TESTBED_PATH", "/testbed")
     try:
-        result = _executer_commande("git -c core.fileMode=false diff", testbed_path, 120)
+        result = testbed.executer("git -c core.fileMode=false diff", None, 120)
         return result.stdout if result.stdout else "No changes found."
     except Exception as err:
         return f"Error: {err}"
 
 def run_command(command, workdir=None):
-    if workdir is None:
-        workdir = os.environ.get("TESTBED_PATH", "/testbed")
     try:
-        result = _executer_commande(command, workdir, 120)
+        result = testbed.executer(command, workdir, 120)
         return f"Exit code: {result.returncode}\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
     except subprocess.TimeoutExpired:
         return "Error: Timeout after 120 seconds."

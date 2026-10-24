@@ -5,7 +5,9 @@ import shlex
 import sys
 import time
 import subprocess
+import shutil
 import signal
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -58,11 +60,38 @@ result = search_code("def validate_email", "*.py")
 print(result)"""
 
 CONTAINER_NAME = f"swebench_agent_{uuid.uuid4().hex[:8]}"
+DEPOT: Path | None = None  # copie de /testbed sur l'hôte, montée dans le conteneur (voir preparer_depot)
+
+
+def preparer_depot(image_name: str, eval_script: str) -> Path:
+    """Copie /testbed de l'image dans un dossier de l'hôte et y écrit eval.sh (AS-41, AS-42).
+
+    Ce dossier est monté sur /testbed dans le conteneur : les outils de fichiers (sur
+    l'hôte, confinés à TESTBED_PATH) et les commandes (dans le conteneur) voient les
+    mêmes fichiers, comme pendant les tests isolés de la moulinette.
+    """
+    dossier = Path(tempfile.mkdtemp(prefix="swebench_testbed_"))
+    copie = f"{CONTAINER_NAME}_copie"
+    subprocess.run(["docker", "create", "--name", copie, image_name], check=True, capture_output=True)
+    try:
+        subprocess.run(["docker", "cp", f"{copie}:/testbed/.", str(dossier)], check=True, capture_output=True)
+    finally:
+        subprocess.run(["docker", "rm", "-f", copie], capture_output=True)
+    # run_tests() lance eval.sh à la racine du dépôt ; il ne doit jamais finir dans le patch
+    (dossier / "eval.sh").write_text(eval_script)
+    exclude = dossier / ".git" / "info" / "exclude"
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    with exclude.open("a") as f:
+        f.write("\neval.sh\n")
+    return dossier
+
 
 def cleanup_container(signum=None, frame=None):
     """Toujours supprimer le conteneur, même en cas de timeout de la moulinette."""
     print(f"\n[*] Nettoyage : Suppression du conteneur {CONTAINER_NAME}...")
     subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
+    if DEPOT is not None:
+        shutil.rmtree(DEPOT, ignore_errors=True)
     if signum is not None:
         print(f"[*] Agent stoppé brutalement (Signal {signum}). Timeout de 900s atteint[cite: 27, 28].")
         sys.exit(1)
@@ -111,11 +140,18 @@ def main():
         print(f"[*] Image {image_name} absente. Téléchargement en cours...[cite: 20]")
         subprocess.run(["docker", "pull", image_name], check=True)
 
-    print(f"[*] Lancement du conteneur {CONTAINER_NAME}...")
-    subprocess.run(["docker", "run", "-d", "--name", CONTAINER_NAME, image_name, "tail", "-f", "/dev/null"], check=True)
+    global DEPOT
+    DEPOT = preparer_depot(image_name, tache.eval_script)
+    print(f"[*] Lancement du conteneur {CONTAINER_NAME} (dépôt monté depuis {DEPOT})...")
+    subprocess.run(["docker", "run", "-d", "--name", CONTAINER_NAME, "-v", f"{DEPOT}:/testbed",
+                    image_name, "tail", "-f", "/dev/null"], check=True)
+    # les fichiers montés n'ont pas le propriétaire attendu par git ("dubious ownership")
+    subprocess.run(["docker", "exec", CONTAINER_NAME, "git", "config", "--global", "--add",
+                    "safe.directory", "/testbed"], check=True)
 
+    # lues par les outils MCP (outils/testbed.py) : commandes dans ce conteneur, fichiers dans DEPOT
     os.environ["CONTAINER_NAME"] = CONTAINER_NAME
-    os.environ["TESTBED_PATH"] = "/testbed" 
+    os.environ["TESTBED_PATH"] = str(DEPOT)
 
     try:
         with SyncMcpClient(SWEBENCH_SERVER_COMMAND) as mcp_client:
