@@ -6,7 +6,7 @@ import re
 
  # Cherche un mot precis dans un fichier (file_pattern pour chercher dans des fichier precis *.py, *.txt)
 def search_code(pattern, file_pattern):
-    testbed = os.environ.get("TESTBED_PATH", "./testbed")
+    testbed = os.environ.get("TESTBED_PATH", "/testbed")
     dossier = Path(testbed)
     
     if not dossier.exists():
@@ -31,7 +31,7 @@ def search_code(pattern, file_pattern):
 
 # cherher une fonction ou class precis
 def search_function_or_class_definition_in_code(name):
-    testbed = os.environ.get("TESTBED_PATH", "./testbed")
+    testbed = os.environ.get("TESTBED_PATH", "/testbed")
     dossier = Path(testbed)
     
     if not dossier.exists():
@@ -62,7 +62,7 @@ def search_function_or_class_definition_in_code(name):
 
 #Cherche tous les appels d'une fonction precis
 def find_references(name, filepath, line):
-    testbed = os.environ.get("TESTBED_PATH", "./testbed")
+    testbed = os.environ.get("TESTBED_PATH", "/testbed")
     dossier = Path(testbed)
     if not dossier.exists():
         return "Error"
