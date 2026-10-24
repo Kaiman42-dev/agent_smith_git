@@ -1,4 +1,5 @@
 from pathlib import Path
+import ast
 import os
 
 
@@ -31,7 +32,16 @@ def edit_file(filepath, old_str, new_str): # remplace un ancien mot par un nouve
         with open(filepath, 'w', encoding="utf-8") as f:
             f.write(replacee)
             
-        return "File updated successfully."
+        message = "File updated successfully."
+        
+        # Vérification de la syntaxe pour avertir le LLM
+        if filepath.endswith(".py"):
+            try:
+                ast.parse(replacee)
+            except SyntaxError as e:
+                message += f"\n[WARNING] Syntax error introduced: {e.msg} at line {e.lineno}. Please fix it."
+                
+        return message
     except Exception as err:
         return f"Error: {err}"
 

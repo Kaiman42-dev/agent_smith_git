@@ -120,10 +120,15 @@ def couper_observation_inventee(texte: str) -> str:
     return re.split(r"^Observation:", texte, maxsplit=1, flags=re.MULTILINE)[0]
 
 def format_observation(result: ExecutionResult) -> str:
-    """What the LLM sees after its code ran: printed output, then the error if any."""
+    """Ce que le LLM voit après l'exécution de son code : la sortie console, puis l'erreur s'il y en a une."""
     observation = result.output + result.error
     if not observation.strip():
-        observation = "(the code ran without error and printed nothing)"
+        observation = "(le code s'est exécuté sans erreur et n'a rien affiché)"
+        
+    if len(observation) > MAX_OBSERVATION:
+        message = "\n\n[AVERTISSEMENT : Sortie trop longue, texte tronqué.]"
+        observation = observation[:MAX_OBSERVATION - len(message)] + message
+        
     return observation[:MAX_OBSERVATION]
 
 class ClientLLM:
