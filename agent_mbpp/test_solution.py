@@ -61,3 +61,8 @@ def test_chaine_qui_ne_compile_pas_ignoree():
 
 def test_rien_trouve():
     assert solution_from_answer("Final Answer: 42", [step(1, "print(1)", "1\n")], "multiply_int") == ""
+
+
+def test_final_answer_suivi_d_un_bloc_python():
+    # gpt-oss-20b : "**Final answer**:\n\n```python\n...```"
+    assert solution_from_answer(f"```python\n{BONNE}\n```", [], "multiply_int") == BONNE

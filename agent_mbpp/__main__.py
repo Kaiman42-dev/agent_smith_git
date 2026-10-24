@@ -9,6 +9,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv # type: ignore
 
+from Extraction_llm import p_mardown
 from agent_algo.agent import Agent, creer_client_cli, creer_clients_secours, fournisseur_de_depart
 from agent_algo.config import charger_config
 from agent_algo.metriques import ecrire_metriques, metriques_du_run
@@ -92,8 +93,10 @@ def extraire_solution(steps, nom_fonction: str) -> str:
 
 
 def solution_from_answer(answer: str, steps, function_name: str) -> str:
-    """final_answer(code) gives the solution directly; otherwise search the steps."""
-    return code_de_la_fonction(answer, function_name) or extraire_solution(steps, function_name)
+    """final_answer(code) gives the solution directly; otherwise search the steps.
+    "Final Answer:" may also be followed by a ```python block."""
+    return (code_de_la_fonction(p_mardown(answer) or answer, function_name)
+            or extraire_solution(steps, function_name))
 
 
 def main():

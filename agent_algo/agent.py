@@ -152,6 +152,17 @@ def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list[
                                      rpm=fournisseur.rpm))
     return secours
 
+# "Final Answer:" comme le demande le prompt, mais aussi ce qu'écrivent les modèles :
+# "**Final answer**:", "**Final Answer:**", "Final answer :", "FINAL ANSWER:"...
+FINAL_ANSWER = re.compile(r"\*{0,2}\s*final answer\s*\*{0,2}\s*:\s*\*{0,2}", re.IGNORECASE)
+
+
+def reponse_finale(contenu: str) -> str | None:
+    """Ce qui suit le dernier "Final Answer:" de la réponse, None s'il n'y en a pas."""
+    morceaux = FINAL_ANSWER.split(contenu)
+    return morceaux[-1].strip() if len(morceaux) > 1 else None
+
+
 def couper_observation_inventee(texte: str) -> str:
     """Coupe la réponse du LLM là où il commence à inventer le résultat de son code (sujet, V.6).
 
@@ -583,7 +594,8 @@ class Agent:
 
             # "Final Answer:" est prioritaire : le llm recopie parfois du code dans son raisonnement final
             # bloc python, ou appel XML / JSON / ReAct converti en python
-            code = None if "Final Answer:" in contenu else extraire_code(contenu)  # parti code
+            finale = reponse_finale(contenu)
+            code = None if finale is not None else extraire_code(contenu)  # parti code
             observation = ""
             result = None
             arret = None  # exit() ou Ctrl+C dans le code du LLM
@@ -623,9 +635,9 @@ class Agent:
                 self.succes = True  # the code called final_answer()
                 return result.final_answer, steps
 
-            if "Final Answer:" in contenu:
+            if finale is not None:
                 self.succes = True
-                return contenu.split("Final Answer:")[-1].strip(), steps
+                return finale, steps
 
             if code is None:
                 # Neither code nor final answer (e.g. an empty reply): do not
