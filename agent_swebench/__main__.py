@@ -122,12 +122,13 @@ def cleanup_container(signum=None, frame=None):
     if DEPOT is not None:
         shutil.rmtree(DEPOT, ignore_errors=True)
     if signum is not None:
-        print(f"[*] Agent stoppé brutalement (Signal {signum}). Timeout de 900s atteint[cite: 27, 28].")
+        print(f"[*] Agent stoppé brutalement (Signal {signum}). Timeout de 900s atteint.")
         sys.exit(1)
 
 def main():
+    global DEPOT  # rempli par preparer_depot, lu par cleanup_container
     fin = time.monotonic() + TIMEOUT - MARGE  # tout au début : le chrono de la moulinette tourne déjà
-    # Gestion du SIGTERM envoyé par la moulinette[cite: 28]
+    # Gestion du SIGTERM envoyé par la moulinette
     signal.signal(signal.SIGTERM, cleanup_container)
     signal.signal(signal.SIGINT, cleanup_container)
 
@@ -162,27 +163,27 @@ def main():
     system_prompt = PROMPT_SWEBENCH
     patch = ""
 
-    # docker
-    image_name = tache.docker_image
-    check_img = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
-    if not check_img.stdout.strip():
-        print(f"[*] Image {image_name} absente. Téléchargement en cours...[cite: 20]")
-        subprocess.run(["docker", "pull", image_name], check=True)
-
-    global DEPOT
-    DEPOT = preparer_depot(image_name, tache.eval_script)
-    print(f"[*] Lancement du conteneur {CONTAINER_NAME} (dépôt monté depuis {DEPOT})...")
-    subprocess.run(["docker", "run", "-d", "--name", CONTAINER_NAME, "-v", f"{DEPOT}:/testbed",
-                    image_name, "tail", "-f", "/dev/null"], check=True)
-    # les fichiers montés n'ont pas le propriétaire attendu par git ("dubious ownership")
-    subprocess.run(["docker", "exec", CONTAINER_NAME, "git", "config", "--global", "--add",
-                    "safe.directory", "/testbed"], check=True)
-
-    # lues par les outils MCP (outils/testbed.py) : commandes dans ce conteneur, fichiers dans DEPOT
-    os.environ["CONTAINER_NAME"] = CONTAINER_NAME
-    os.environ["TESTBED_PATH"] = str(DEPOT)
-
     try:
+        # docker : dans le try, pour qu'un échec (image introuvable, Docker arrêté...) soit noté
+        # dans solution.json et que le finally nettoie le conteneur et DEPOT
+        image_name = tache.docker_image
+        check_img = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
+        if not check_img.stdout.strip():
+            print(f"[*] Image {image_name} absente. Téléchargement en cours...")
+            subprocess.run(["docker", "pull", image_name], check=True)
+
+        DEPOT = preparer_depot(image_name, tache.eval_script)
+        print(f"[*] Lancement du conteneur {CONTAINER_NAME} (dépôt monté depuis {DEPOT})...")
+        subprocess.run(["docker", "run", "-d", "--name", CONTAINER_NAME, "-v", f"{DEPOT}:/testbed",
+                        image_name, "tail", "-f", "/dev/null"], check=True)
+        # les fichiers montés n'ont pas le propriétaire attendu par git ("dubious ownership")
+        subprocess.run(["docker", "exec", CONTAINER_NAME, "git", "config", "--global", "--add",
+                        "safe.directory", "/testbed"], check=True)
+
+        # lues par les outils MCP (outils/testbed.py) : commandes dans ce conteneur, fichiers dans DEPOT
+        os.environ["CONTAINER_NAME"] = CONTAINER_NAME
+        os.environ["TESTBED_PATH"] = str(DEPOT)
+
         with SyncMcpClient(SWEBENCH_SERVER_COMMAND) as mcp_client:
             with Sandbox(tools=build_tools(mcp_client)) as sandbox:
                 
