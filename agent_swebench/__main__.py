@@ -56,8 +56,37 @@ Each turn, you must provide a "Thought:" explaining your reasoning, followed by 
 
 Thought: I need to find where the email validation logic is defined to fix the "@" symbol bug.
 ```python
-result = search_code("def validate_email", "*.py")
-print(result)"""
+print(search_code(pattern="def validate_email", file_pattern="*.py"))
+```
+Observation:
+/testbed/app/validators.py:12 def validate_email(email):
+
+Thought: I read this function.
+```python
+print(read_file(filepath="/testbed/app/validators.py", start_line=12, end_line=14))
+```
+Observation:
+12: def validate_email(email):
+13:     return email.count("@") == 2
+
+Thought: An email has exactly one "@", not two. I fix it, then run the tests.
+```python
+print(edit_file(filepath="/testbed/app/validators.py", old_str='count("@") == 2', new_str='count("@") == 1'))
+print(run_tests())
+```
+Observation:
+File updated successfully.
+Tests outputs: test_validate_email ... ok
+
+Thought: The tests pass, I submit the patch.
+```python
+final_answer(get_patch())
+```
+
+--- END OF EXAMPLE ---
+
+The Observation is written by the system after running your code: never write it yourself.
+Always print() what you want to see. Variables are kept from one turn to the next."""
 
 CONTAINER_NAME = f"swebench_agent_{uuid.uuid4().hex[:8]}"
 DEPOT: Path | None = None  # copie de /testbed sur l'hôte, montée dans le conteneur (voir preparer_depot)
