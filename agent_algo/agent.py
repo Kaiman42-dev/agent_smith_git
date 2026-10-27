@@ -476,12 +476,20 @@ class Agent:
             code = None if "Final Answer:" in contenu else extraire_code(contenu)  # parti code
             observation = ""
             result = None
+            arret = None  # exit() ou Ctrl+C dans le code du LLM
             if code is not None:
-                # the sandbox keeps the LLM's variables from one step to the next
-                result = self.sandbox.execute(code)  # parti observe
-                observation = format_observation(result)
-                note = CUT_NOTE if contenu != brut else ""  # le LLM ne doit jamais deviner pourquoi
-                memoire.append({"role": "user", "content": f"Observation:\n{observation}{note}"})
+                try:
+                    # the sandbox keeps the LLM's variables from one step to the next
+                    result = self.sandbox.execute(code)  # parti observe
+                except (SystemExit, KeyboardInterrupt) as e:
+                    # elles remontent jusqu'ici (sujet, V.2) : on note le tour, puis on s'arrête
+                    # proprement, pour que solution.json soit quand même écrit
+                    arret = f"{type(e).__name__} raised by the code, the agent stopped"
+                    observation = arret
+                else:
+                    observation = format_observation(result)
+                    note = CUT_NOTE if contenu != brut else ""  # le LLM ne doit jamais deviner pourquoi
+                    memoire.append({"role": "user", "content": f"Observation:\n{observation}{note}"})
 
             steps.append(StepMetrics(
                 step=tour,
@@ -495,6 +503,9 @@ class Agent:
                 sandbox_input=code or "",
                 sandbox_output=observation,
             ))
+
+            if arret is not None:
+                return f"Arret de l'agent : {arret}.", steps
 
             if result is not None and result.final_answer is not None:
                 self.succes = True  # the code called final_answer()
