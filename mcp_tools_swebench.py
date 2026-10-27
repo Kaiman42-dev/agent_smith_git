@@ -108,7 +108,8 @@ def run_tests() -> str:
     """Run the task's evaluation script (eval.sh at the repository root).
 
     Returns:
-        The exit code, stdout and stderr of the script.
+        The test part of the evaluation script's output (between its "Start Test Output"
+        and "End Test Output" markers). If it is too long, only the last 4000 characters are returned.
     """
     return execution_tools.run_tests()
 
