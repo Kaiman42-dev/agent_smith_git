@@ -73,3 +73,8 @@ def test_mcp_protocol():
         result = sb.execute("print(run_tests(code='def f(): return 1', test_list=['assert f() == 1']))")
         assert '"success": true' in result.output
         assert sb.execute("final_answer('fini')").final_answer == "fini"
+        # les LLM écrivent aussi les arguments sans leur nom, dans l'ordre du schéma
+        result = sb.execute("print(run_tests('def f(): return 1', ['assert f() == 1']))")
+        assert '"success": true' in result.output
+        assert "positional" in sb.execute("run_tests('a', ['b'], 'c')").error
+        assert "multiple values" in sb.execute("run_tests('a', code='a', test_list=[])").error

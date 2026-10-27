@@ -16,7 +16,7 @@ Déroulé d'un bloc de code (une "conversation") :
 """
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 MAX_MESSAGE_BYTES = 10 * 1024 * 1024  # un message plus gros est rejeté
 
@@ -37,6 +37,7 @@ class ToolCall:
     """Enfant -> parent : appelle cet outil MCP (hors de la sandbox)."""
     name: str
     arguments: dict
+    args: list = field(default_factory=list)  # arguments positionnels : run_tests("def f(): ...", [...])
 
 
 @dataclass

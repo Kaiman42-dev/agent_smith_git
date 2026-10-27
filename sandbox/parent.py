@@ -149,10 +149,10 @@ class Sandbox:
         tool = self.tools.get(call.name)
         if tool is None:
             return ToolReply(error=f"Unknown tool: {call.name}")
-        if not isinstance(call.arguments, dict):
-            return ToolReply(error="Tool arguments must be passed by keyword")
+        if not isinstance(call.arguments, dict) or not isinstance(call.args, list):
+            return ToolReply(error="Invalid tool arguments")
         try:
-            value = tool(**call.arguments)
+            value = tool(*call.args, **call.arguments)
         except Exception as e:
             return ToolReply(error=f"{type(e).__name__}: {e}")
         # Les outils MCP renvoient du texte ; str() garde la réponse compatible JSON

@@ -20,12 +20,25 @@ def _result_to_text(result) -> str:
     return "\n".join(item.text for item in result.content if item.type == "text")
 
 
-def make_tool(client, tool_name: str, description: str | None = None):
+def make_tool(client, tool_name: str, description: str | None = None,
+              params: list[str] | None = None):
     """Builds a Python function that calls the MCP tool `tool_name`.
 
-    Arguments must be passed by keyword: run_tests(code=..., test_list=...)
+    params: the tool's parameter names, in the order of its schema. Positional
+    arguments are matched to them: run_tests("def f(): ...", ["assert f()"])
+    becomes run_tests(code="def f(): ...", test_list=["assert f()"]).
     """
-    def tool_function(**kwargs):
+    params = params or []
+
+    def tool_function(*args, **kwargs):
+        # MCP only accepts named arguments: give each positional one its name
+        if len(args) > len(params):
+            raise TypeError(f"{tool_name}() takes {len(params)} positional arguments "
+                            f"but {len(args)} were given")
+        for name, value in zip(params, args):
+            if name in kwargs:
+                raise TypeError(f"{tool_name}() got multiple values for argument '{name}'")
+            kwargs[name] = value
         result = client.call_tool(tool_name, kwargs)
         text = _result_to_text(result)
         if result.is_error:
@@ -40,7 +53,9 @@ def make_tool(client, tool_name: str, description: str | None = None):
 
 def build_tools(client) -> dict:
     """Returns {tool_name: function} for every tool of the connected server."""
-    return {tool.name: make_tool(client, tool.name, tool.description)
+    # the schema keeps the order of the parameters: it is used to name positional arguments
+    return {tool.name: make_tool(client, tool.name, tool.description,
+                                 list((tool.input_schema or {}).get("properties", {})))
             for tool in client.list_tools()}
 
 
@@ -88,7 +103,7 @@ def build_manual(tools) -> str:
     return (
         "## Available tools\n\n"
         "The following functions are already defined in your Python namespace.\n"
-        "- Call them directly, always with keyword arguments: tool(arg=value).\n"
+        "- Call them directly, with keyword arguments (tool(arg=value), preferred) or positional ones.\n"
         "- Each call returns a string.\n"
         "- An invalid call raises RuntimeError with the server's message.\n\n"
         f"```python\n{stubs}\n```"
