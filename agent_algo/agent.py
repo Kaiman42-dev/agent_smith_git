@@ -50,6 +50,7 @@ Les variables sont conservees d'un tour a l'autre.
 Quand tu as la reponse finale, appelle final_answer(reponse) dans ton code,
 ou reponds SANS bloc ```python```, en commencant par "Final Answer:".
 """
+
 def url_chat(url: str) -> str:
     """--provider-url et models.json donnent l'url de base, ClientLLM veut l'url complete"""
     url = url.rstrip("/")
@@ -455,6 +456,8 @@ class Agent:
 
         for tour in range(1, self.max_tours + 1):
             self.tour = tour
+            if tour > 1:
+                time.sleep(12)
             raison = self.raison_arret(steps, memoire)  # on vérifie le budget AVANT de dépenser
             if raison:
                 return f"Arret de l'agent : {raison}.", steps
