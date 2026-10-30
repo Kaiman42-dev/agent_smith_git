@@ -38,6 +38,12 @@ CUT_NOTE = ("\n(Note: your reply was cut at 'Observation:'. Observations come "
 FORMAT_REMINDER = ("Your reply contained no ```python block and no final answer. "
                    "Reply with ONE ```python block, or give your final answer.")
 
+# Added to every observation when the caller asks for it (alerte_budget): without it the
+# LLM does not know how many steps it has left, and keeps exploring until the limit
+BUDGET_NOTE = "\n[Budget: step {tour}/{max_tours}, about {restants} step(s) left]"
+BUDGET_ALERT = ("\nOnly {restants} step(s) left: stop exploring. Finish your fix now "
+                "and submit it with final_answer().")
+
 # The tools are no longer listed here: they come from the connected MCP server,
 # and their manual (mcp_bridge.build_manual) is passed to Agent as tools_manual
 PROMPT_SYSTEME = """Tu es un agent qui resout des taches de code.
@@ -355,12 +361,15 @@ class Agent:
     def __init__(self, question, max_tours, client, sandbox: Sandbox,
                  prompt_systeme=PROMPT_SYSTEME, tools_manual: str = "",
                  secours: list | None = None, max_input_tokens: int | None = None,
-                 max_output_tokens: int | None = None, fin: float | None = None):
+                 max_output_tokens: int | None = None, fin: float | None = None,
+                 alerte_budget: int | None = None):
         """sandbox: created by the caller, who chooses its MCP tools.
         tools_manual: tool documentation appended to the system prompt.
         secours: clients LLM de secours, essayés dans l'ordre si le client actuel ne répond plus.
         max_input_tokens, max_output_tokens : budget de tokens pour toute la tâche (sujet, VI.1).
-        fin : heure limite de la tâche (time.monotonic()). None = pas de limite."""
+        fin : heure limite de la tâche (time.monotonic()). None = pas de limite.
+        alerte_budget : si donné, chaque observation dit au LLM combien de tours il lui reste, et
+            lui demande de conclure à partir de ce nombre de tours restants. None = rien n'est ajouté."""
         self.question = question
         self.max_tours = max_tours
         self.client = client
@@ -373,6 +382,7 @@ class Agent:
         self.max_input_tokens = max_input_tokens
         self.max_output_tokens = max_output_tokens
         self.fin = fin
+        self.alerte_budget = alerte_budget
         self.taille_dernier_envoi = 0  # caractères envoyés au dernier appel
         # pour les metriques du benchmark (agent_algo/metriques.py) : ce que solution.json ne garde pas
         self.tour = 0
@@ -401,6 +411,22 @@ class Agent:
                 return (f"limite de tokens d'entrée atteinte ({entree} utilisés, "
                         f"~{prochain} pour le prochain appel, limite {self.max_input_tokens})")
         return None
+
+
+    def note_budget(self, tour, steps) -> str:
+        """Fin d'observation qui donne au LLM ses tours restants (alerte_budget).
+        steps : les tours précédents, sans le tour en cours."""
+        if self.alerte_budget is None:
+            return ""
+        restants = self.max_tours - tour
+        if self.max_input_tokens is not None and self.client.input_tokens:
+            # chaque appel coûte au moins autant que celui-ci : estimation optimiste
+            entree = sum(s.input_tokens for s in steps) + self.client.input_tokens
+            restants = min(restants, max(0, self.max_input_tokens - entree) // self.client.input_tokens)
+        note = BUDGET_NOTE.format(tour=tour, max_tours=self.max_tours, restants=restants)
+        if restants <= self.alerte_budget:
+            note += BUDGET_ALERT.format(restants=restants)
+        return note
 
 
     def attendre_quota(self) -> bool:
@@ -473,6 +499,7 @@ class Agent:
             contenu = couper_observation_inventee(brut)  # on garde seulement ce qui précède l'observation inventée
             # some APIs reject an empty assistant message, so store a placeholder
             memoire.append({"role": "assistant", "content": contenu or "(empty reply)"}) # je sauvegarde la reponse du llm en mémoire
+            budget = self.note_budget(tour, steps)  # avant steps.append : steps = les tours précédents
 
             # "Final Answer:" est prioritaire : le llm recopie parfois du code dans son raisonnement final
             # bloc python, ou appel XML / JSON / ReAct converti en python
@@ -492,7 +519,7 @@ class Agent:
                 else:
                     observation = format_observation(result)
                     note = CUT_NOTE if contenu != brut else ""  # le LLM ne doit jamais deviner pourquoi
-                    memoire.append({"role": "user", "content": f"Observation:\n{observation}{note}"})
+                    memoire.append({"role": "user", "content": f"Observation:\n{observation}{note}{budget}"})
 
             steps.append(StepMetrics(
                 step=tour,
@@ -521,7 +548,7 @@ class Agent:
             if code is None:
                 # Neither code nor final answer (e.g. an empty reply): do not
                 # stop, remind the format. max_tours still bounds the loop
-                memoire.append({"role": "user", "content": FORMAT_REMINDER})
+                memoire.append({"role": "user", "content": FORMAT_REMINDER + budget})
 
         return "nombre maximum de tours atteint", steps
 

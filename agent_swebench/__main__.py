@@ -30,10 +30,16 @@ TIMEOUT = 900
 # (jusqu'à 300 s, l'outil n'est pas soumis au timeout de la sandbox), puis il faut
 # supprimer le conteneur et écrire solution.json
 MARGE = 330
+# À partir de ce nombre de tours restants, chaque observation demande au LLM de conclure
+ALERTE_BUDGET = 5
 
 # Our SWE-bench MCP server
 SWEBENCH_SERVER = Path(__file__).resolve().parent.parent / "mcp_tools_swebench.py"
 SWEBENCH_SERVER_COMMAND = f"{shlex.quote(sys.executable)} {shlex.quote(str(SWEBENCH_SERVER))}"
+
+# Les images SWE-bench n'existent qu'en x86_64 : sans --platform, un Mac arm64 échoue
+# ("no matching manifest for linux/arm64/v8"). Sans effet sur une machine x86.
+DOCKER_PLATFORM = ["--platform", "linux/amd64"]
 
 PROMPT_SWEBENCH = """You are an expert software engineer resolving a bug in a codebase located at `/testbed`.
 Your goal is to locate the bug, fix it minimally, verify the fix, and submit the patch.
@@ -41,6 +47,7 @@ Your goal is to locate the bug, fix it minimally, verify the fix, and submit the
 CRITICAL RULES:
 - NEVER modify the test files. Only edit the source code to fix the bug.
 - Be concise in your reasoning to save tokens (you have a strict global limit).
+- Each Observation ends with your remaining step budget. Once you know the cause of the bug, fix it right away: do not keep exploring.
 
 METHODOLOGY:
 1. Search the codebase to locate the faulty code.
@@ -101,7 +108,8 @@ def preparer_depot(image_name: str, eval_script: str) -> Path:
     """
     dossier = Path(tempfile.mkdtemp(prefix="swebench_testbed_"))
     copie = f"{CONTAINER_NAME}_copie"
-    subprocess.run(["docker", "create", "--name", copie, image_name], check=True, capture_output=True)
+    subprocess.run(["docker", "create", *DOCKER_PLATFORM, "--name", copie, image_name],
+                   check=True, capture_output=True)
     try:
         subprocess.run(["docker", "cp", f"{copie}:/testbed/.", str(dossier)], check=True, capture_output=True)
     finally:
@@ -170,11 +178,11 @@ def main():
         check_img = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
         if not check_img.stdout.strip():
             print(f"[*] Image {image_name} absente. Téléchargement en cours...")
-            subprocess.run(["docker", "pull", image_name], check=True)
+            subprocess.run(["docker", "pull", *DOCKER_PLATFORM, image_name], check=True)
 
         DEPOT = preparer_depot(image_name, tache.eval_script)
         print(f"[*] Lancement du conteneur {CONTAINER_NAME} (dépôt monté depuis {DEPOT})...")
-        subprocess.run(["docker", "run", "-d", "--name", CONTAINER_NAME, "-v", f"{DEPOT}:/testbed",
+        subprocess.run(["docker", "run", "-d", *DOCKER_PLATFORM, "--name", CONTAINER_NAME, "-v", f"{DEPOT}:/testbed",
                         image_name, "tail", "-f", "/dev/null"], check=True)
         # les fichiers montés n'ont pas le propriétaire attendu par git ("dubious ownership")
         subprocess.run(["docker", "exec", CONTAINER_NAME, "git", "config", "--global", "--add",
@@ -195,7 +203,7 @@ def main():
                               sandbox=sandbox, prompt_systeme=PROMPT_SWEBENCH,
                               tools_manual=build_manual(mcp_client.list_tools()), secours=secours,
                               max_input_tokens=MAX_INPUT_TOKENS, max_output_tokens=MAX_OUTPUT_TOKENS,
-                              fin=fin)
+                              fin=fin, alerte_budget=ALERTE_BUDGET)
                 
                 system_prompt = agent.prompt_systeme
                 reponse, steps = agent.agent_algo()

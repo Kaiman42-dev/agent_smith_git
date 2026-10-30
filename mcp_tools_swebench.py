@@ -5,9 +5,6 @@ from outils import code_search_tools, execution_tools, file_systeme_tool
 
 mcp = MCPServer("swebench")
 
-
-# ---- File system tools ----
-
 @mcp.tool()
 def read_file(filepath: str, start_line: int, end_line: int) -> str:
     """Read lines start_line to end_line (inclusive) of a file.
