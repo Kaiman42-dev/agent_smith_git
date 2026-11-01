@@ -1,0 +1,90 @@
+{
+  "task_id": "pydata__xarray-4629",
+  "benchmark": "swebench",
+  "model": "gemini-3.6-flash",
+  "provider": "gemini",
+  "models_used": [
+    "gemini-3.6-flash"
+  ],
+  "success": true,
+  "iterations": 11,
+  "total_input_tokens": 66393,
+  "total_output_tokens": 658,
+  "input_tokens_per_step": [
+    2621,
+    2673,
+    4445,
+    4986,
+    6353,
+    6409,
+    6519,
+    7282,
+    7386,
+    8750,
+    8969
+  ],
+  "output_tokens_per_step": [
+    0,
+    0,
+    64,
+    167,
+    82,
+    56,
+    103,
+    74,
+    11,
+    11,
+    90
+  ],
+  "total_time_seconds": 229.3463008403778,
+  "request_time_ms_per_step": [
+    3316.9741249985236,
+    5041.957166999055,
+    3119.496250001248,
+    4026.253457999701,
+    3050.2167500017094,
+    2662.3881669984257,
+    3278.68275000219,
+    2497.9165000004286,
+    3600.9182919988234,
+    4631.976957996812,
+    5172.418916001334
+  ],
+  "total_requests": 14,
+  "total_retries": 1,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 6,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 10,
+      "model": "gemini-3.6-flash",
+      "error": "timeout"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [
+    "xarray/core/merge.py"
+  ],
+  "first_patch_file_step": 3,
+  "test_failures": [
+    {
+      "step": 4,
+      "failures": 1
+    },
+    {
+      "step": 9,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": 9,
+  "tests_pass_step": 9,
+  "steps_after_tests_pass": 2
+}

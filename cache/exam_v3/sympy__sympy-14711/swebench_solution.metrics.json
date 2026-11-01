@@ -1,0 +1,93 @@
+{
+  "task_id": "sympy__sympy-14711",
+  "benchmark": "swebench",
+  "model": "gemini-3.6-flash",
+  "provider": "gemini",
+  "models_used": [
+    "gemini-3.6-flash",
+    "openai/gpt-oss-120b"
+  ],
+  "success": true,
+  "iterations": 6,
+  "total_input_tokens": 21186,
+  "total_output_tokens": 2445,
+  "input_tokens_per_step": [
+    2030,
+    2082,
+    2921,
+    4359,
+    4534,
+    5260
+  ],
+  "output_tokens_per_step": [
+    495,
+    721,
+    889,
+    245,
+    22,
+    73
+  ],
+  "total_time_seconds": 94.71369910240173,
+  "request_time_ms_per_step": [
+    10514.169082998706,
+    4905.980999999883,
+    2456.3485409998975,
+    1183.4455419993901,
+    526.8456249978044,
+    570.1236249988142
+  ],
+  "total_requests": 11,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 3,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 5,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [
+    {
+      "step": 3,
+      "from": "gemini-3.6-flash",
+      "to": "openai/gpt-oss-120b",
+      "code": 429
+    }
+  ],
+  "patch_files": [
+    "sympy/physics/vector/vector.py"
+  ],
+  "first_patch_file_step": 3,
+  "test_failures": [
+    {
+      "step": 2,
+      "failures": 0
+    },
+    {
+      "step": 5,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": null,
+  "tests_pass_step": 2,
+  "steps_after_tests_pass": 4
+}

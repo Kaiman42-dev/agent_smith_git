@@ -41,6 +41,20 @@ def test_sortie_le_modele_recoit_le_budget_restant_puis_l_agent_s_arrete():
     assert "sortie" in reponse
 
 
+def test_par_tour_le_modele_ne_recoit_jamais_plus_que_la_limite_d_un_tour():
+    client = ClientCompteur(entree=100, sortie=600)
+    reponse, steps = lancer(client, max_output_tokens=1500, max_tokens_par_tour=400)
+    # 400 par tour tant que le budget de la tâche le permet, puis ce qu'il reste (1500 - 3 * 400)
+    assert client.max_tokens_recus == [400, 400, 400, 300]
+    assert "sortie" in reponse
+
+
+def test_par_tour_sans_budget_de_tache():
+    client = ClientCompteur(entree=100, sortie=10)
+    lancer(client, max_tokens_par_tour=400)
+    assert set(client.max_tokens_recus) == {400}
+
+
 def test_entree_s_arrete_avant_l_appel_qui_depasserait():
     client = ClientCompteur(entree=2500, sortie=10)
     reponse, steps = lancer(client, max_input_tokens=6000)

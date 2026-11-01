@@ -32,6 +32,13 @@ TIMEOUT = 900
 MARGE = 330
 # À partir de ce nombre de tours restants, chaque observation demande au LLM de conclure
 ALERTE_BUDGET = 5
+# Seules les N dernières observations restent entières : sur sympy-14711, toutes les lectures
+# de fichiers gardées en entier menaient à 295k tokens d'entrée sur 300k
+OBSERVATIONS_COMPLETES = 4
+# Tokens de sortie au plus par tour : sinon un LLM qui invente toute la suite de la conversation
+# (code, Observation:, code...) peut vider MAX_OUTPUT_TOKENS en un seul appel (9567 tokens au
+# tour 2 de sympy-14711). Les tours normaux n'ont jamais dépassé 600
+MAX_TOKENS_PAR_TOUR = 2000
 
 # Our SWE-bench MCP server
 SWEBENCH_SERVER = Path(__file__).resolve().parent.parent / "mcp_tools_swebench.py"
@@ -48,13 +55,14 @@ CRITICAL RULES:
 - NEVER modify the test files. Only edit the source code to fix the bug.
 - Be concise in your reasoning to save tokens (you have a strict global limit).
 - Each Observation ends with your remaining step budget. Once you know the cause of the bug, fix it right away: do not keep exploring.
+- Only the last 4 Observations are kept in full, older ones are shortened.
+- Never read the same lines twice. Read a whole function at once (around 60 lines), not small pieces.
 
 METHODOLOGY:
-1. Search the codebase to locate the faulty code.
-2. Run `run_tests()` to reproduce the bug and observe the failing tests.
-3. Make a minimal fix using `edit_file()`.
-4. Run `run_tests()` again to ensure the tests pass.
-5. Submit your solution by calling `final_answer(get_patch())`.
+1. Run `run_tests()` to reproduce the bug. If the issue or the tests show a traceback, the last frame in the source code (not in the tests) is usually where the fix goes: read that function first.
+2. Otherwise, use `search_code()` or `search_function_or_class_definition_in_code()` to find the faulty code, instead of reading files from the top.
+3. As soon as you have a hypothesis, make a minimal fix using `edit_file()` and run `run_tests()`: the test output tells you if you were right. A wrong fix costs one step, more exploring costs many.
+4. When the tests pass, submit right away by calling `final_answer(get_patch())`.
 
 FORMAT EXPECTED:
 Each turn, you must provide a "Thought:" explaining your reasoning, followed by ONE ```python block of code to execute.
@@ -203,7 +211,9 @@ def main():
                               sandbox=sandbox, prompt_systeme=PROMPT_SWEBENCH,
                               tools_manual=build_manual(mcp_client.list_tools()), secours=secours,
                               max_input_tokens=MAX_INPUT_TOKENS, max_output_tokens=MAX_OUTPUT_TOKENS,
-                              fin=fin, alerte_budget=ALERTE_BUDGET)
+                              fin=fin, alerte_budget=ALERTE_BUDGET,
+                              observations_completes=OBSERVATIONS_COMPLETES,
+                              max_tokens_par_tour=MAX_TOKENS_PAR_TOUR)
                 
                 system_prompt = agent.prompt_systeme
                 reponse, steps = agent.agent_algo()

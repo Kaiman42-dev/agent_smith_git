@@ -30,6 +30,13 @@ MAX_ATTENTES_QUOTA = 30
 
 MAX_OBSERVATION = 5000  # sert a couper les observations trop longues pour ne pas exploser le contexte
 
+# Chaque appel renvoie toute la conversation : sans ça, une lecture de fichier faite au tour 3
+# est repayée à chacun des tours suivants. On garde le début et la fin des anciennes observations
+# (la fin d'une sortie de tests contient la traceback)
+DEBUT_ANCIENNE = 300
+FIN_ANCIENNE = 300
+OLD_NOTE = "\n[... old observation shortened ...]\n"
+
 # Added to the next observation when the LLM's reply had to be cut
 CUT_NOTE = ("\n(Note: your reply was cut at 'Observation:'. Observations come "
             "from the sandbox: never write them yourself.)")
@@ -357,19 +364,36 @@ def taille(memoire) -> int:
     return sum(len(m["content"]) for m in memoire)
 
 
+def raccourcir_anciennes_observations(memoire, garder: int) -> None:
+    """Raccourcit (sur place) toutes les observations sauf les `garder` dernières :
+    on garde leur début et leur fin, le milieu est remplacé par OLD_NOTE."""
+    observations = [m for m in memoire if m["role"] == "user" and m["content"].startswith("Observation:")]
+    anciennes = observations[:-garder] if garder > 0 else observations
+    for m in anciennes:
+        texte = m["content"]
+        if OLD_NOTE in texte or len(texte) <= DEBUT_ANCIENNE + FIN_ANCIENNE + len(OLD_NOTE):
+            continue  # déjà raccourcie, ou trop courte pour que ça vaille le coup
+        m["content"] = texte[:DEBUT_ANCIENNE] + OLD_NOTE + texte[-FIN_ANCIENNE:]
+
+
 class Agent:
     def __init__(self, question, max_tours, client, sandbox: Sandbox,
                  prompt_systeme=PROMPT_SYSTEME, tools_manual: str = "",
                  secours: list | None = None, max_input_tokens: int | None = None,
                  max_output_tokens: int | None = None, fin: float | None = None,
-                 alerte_budget: int | None = None):
+                 alerte_budget: int | None = None, observations_completes: int | None = None,
+                 max_tokens_par_tour: int | None = None):
         """sandbox: created by the caller, who chooses its MCP tools.
         tools_manual: tool documentation appended to the system prompt.
         secours: clients LLM de secours, essayés dans l'ordre si le client actuel ne répond plus.
         max_input_tokens, max_output_tokens : budget de tokens pour toute la tâche (sujet, VI.1).
         fin : heure limite de la tâche (time.monotonic()). None = pas de limite.
         alerte_budget : si donné, chaque observation dit au LLM combien de tours il lui reste, et
-            lui demande de conclure à partir de ce nombre de tours restants. None = rien n'est ajouté."""
+            lui demande de conclure à partir de ce nombre de tours restants. None = rien n'est ajouté.
+        observations_completes : si donné, seules les N dernières observations restent entières dans
+            la conversation, les plus anciennes sont raccourcies. None = on garde tout.
+        max_tokens_par_tour : si donné, aucun appel ne peut générer plus de tokens que ça (en plus
+            de max_output_tokens pour toute la tâche). None = seul le budget restant compte."""
         self.question = question
         self.max_tours = max_tours
         self.client = client
@@ -383,6 +407,8 @@ class Agent:
         self.max_output_tokens = max_output_tokens
         self.fin = fin
         self.alerte_budget = alerte_budget
+        self.observations_completes = observations_completes
+        self.max_tokens_par_tour = max_tokens_par_tour
         self.taille_dernier_envoi = 0  # caractères envoyés au dernier appel
         # pour les metriques du benchmark (agent_algo/metriques.py) : ce que solution.json ne garde pas
         self.tour = 0
@@ -490,6 +516,8 @@ class Agent:
             self.taille_dernier_envoi = taille(memoire)
             restant = None if self.max_output_tokens is None else \
                 self.max_output_tokens - sum(s.output_tokens for s in steps)
+            if self.max_tokens_par_tour is not None:
+                restant = self.max_tokens_par_tour if restant is None else min(restant, self.max_tokens_par_tour)
             message, code_erreur = self.appeler_llm(memoire, restant) # parti de thinking
             if message is None:  # plus aucun fournisseur ne repond : on arrete
                 if self.temps_ecoule():
@@ -520,6 +548,8 @@ class Agent:
                     observation = format_observation(result)
                     note = CUT_NOTE if contenu != brut else ""  # le LLM ne doit jamais deviner pourquoi
                     memoire.append({"role": "user", "content": f"Observation:\n{observation}{note}{budget}"})
+                    if self.observations_completes is not None:
+                        raccourcir_anciennes_observations(memoire, self.observations_completes)
 
             steps.append(StepMetrics(
                 step=tour,
