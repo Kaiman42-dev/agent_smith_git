@@ -12,7 +12,7 @@
             "name": "openrouter",
             "url": "https://openrouter.ai/api/v1",
             "api_key_env": "OPENROUTER_API_KEY",
-            "fallback_model": "poolside/laguna-s-2.1:free"
+            "fallback_model": "cohere/north-mini-code:free"
         },
         {
             "name": "gemini",
@@ -26,6 +26,6 @@
         {"provider": "groq", "model": "openai/gpt-oss-120b"},
         {"provider": "groq", "model": "openai/gpt-oss-20b"},
         {"provider": "groq", "model": "qwen/qwen3.8-27b"},
-        {"provider": "openrouter", "model": "poolside/laguna-s-2.1:free"}
+        {"provider": "openrouter", "model": "cohere/north-mini-code:free"}
     ]
 }

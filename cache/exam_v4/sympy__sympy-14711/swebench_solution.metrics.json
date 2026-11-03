@@ -1,0 +1,230 @@
+{
+  "task_id": "sympy__sympy-14711",
+  "benchmark": "swebench",
+  "model": "gemini-3.6-flash",
+  "provider": "gemini",
+  "models_used": [
+    "gemini-3.6-flash",
+    "openai/gpt-oss-120b"
+  ],
+  "success": false,
+  "iterations": 20,
+  "total_input_tokens": 100403,
+  "total_output_tokens": 5179,
+  "input_tokens_per_step": [
+    2030,
+    2082,
+    3041,
+    3722,
+    4206,
+    4510,
+    3865,
+    3979,
+    4442,
+    4644,
+    4852,
+    5623,
+    5756,
+    6346,
+    7072,
+    7219,
+    7337,
+    6504,
+    6559,
+    6614
+  ],
+  "output_tokens_per_step": [
+    187,
+    62,
+    648,
+    519,
+    82,
+    53,
+    86,
+    80,
+    86,
+    50,
+    86,
+    82,
+    82,
+    82,
+    86,
+    82,
+    86,
+    132,
+    608,
+    2000
+  ],
+  "total_time_seconds": 411.0026080608368,
+  "request_time_ms_per_step": [
+    21428.03645799995,
+    2050.7244999998875,
+    5214.369125000303,
+    6029.493166000066,
+    8666.786874999161,
+    36838.85124999961,
+    20618.771082999956,
+    11907.591750000392,
+    8194.600916000127,
+    3754.9179579991687,
+    12441.217540999787,
+    12742.008292000719,
+    1705.098000000362,
+    6209.118791999572,
+    3038.5493750000023,
+    1849.6781670000928,
+    18872.311832999912,
+    1392.1376250000321,
+    2161.7070419997617,
+    6864.0838330002225
+  ],
+  "total_requests": 44,
+  "total_retries": 8,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 3,
+      "model": "gemini-3.6-flash",
+      "error": "503"
+    },
+    {
+      "step": 4,
+      "model": "gemini-3.6-flash",
+      "error": "503"
+    },
+    {
+      "step": 4,
+      "model": "gemini-3.6-flash",
+      "error": "503"
+    },
+    {
+      "step": 4,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 5,
+      "model": "gemini-3.6-flash",
+      "error": "503"
+    },
+    {
+      "step": 6,
+      "model": "gemini-3.6-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 8,
+      "model": "gemini-3.6-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 8,
+      "model": "gemini-3.6-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 14,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 14,
+      "model": "gemini-3.6-flash",
+      "error": "503"
+    },
+    {
+      "step": 17,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 18,
+      "model": "gemini-3.6-flash",
+      "error": "403"
+    },
+    {
+      "step": 18,
+      "model": "gemini-3.6-flash",
+      "error": "403"
+    },
+    {
+      "step": 18,
+      "model": "gemini-3.6-flash",
+      "error": "403"
+    },
+    {
+      "step": 18,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 18,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 19,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 20,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 21,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 21,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 21,
+      "model": "openai/gpt-oss-120b",
+      "error": "413"
+    },
+    {
+      "step": 21,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 21,
+      "model": "poolside/laguna-s-2.1:free",
+      "error": "404"
+    }
+  ],
+  "fallbacks": [
+    {
+      "step": 18,
+      "from": "gemini-3.6-flash",
+      "to": "openai/gpt-oss-120b",
+      "code": 429
+    },
+    {
+      "step": 21,
+      "from": "openai/gpt-oss-120b",
+      "to": "poolside/laguna-s-2.1:free",
+      "code": 429
+    }
+  ],
+  "patch_files": [],
+  "first_patch_file_step": null,
+  "test_failures": [
+    {
+      "step": 2,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": null,
+  "tests_pass_step": 2,
+  "steps_after_tests_pass": null
+}
