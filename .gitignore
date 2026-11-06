@@ -12,3 +12,6 @@ cache/debug_solution.json
 
 # grille et scripts du correcteur : fournis par l examen, pas notre code
 exams/
+
+# réglages locaux et worktrees de Claude Code
+.claude/
