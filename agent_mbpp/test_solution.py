@@ -12,7 +12,7 @@ def step(n, code, sortie):
 
 
 def dans_une_chaine(fonction):
-    """le format demandé par PROMPT_MBPP"""
+    """le format demandé par CONSIGNES_MBPP"""
     return (f"code = '''{fonction}'''\n"
             "result = run_tests(code=code, test_list=tests)\nprint(result)\n")
 

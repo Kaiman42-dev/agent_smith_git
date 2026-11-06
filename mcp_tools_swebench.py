@@ -149,7 +149,7 @@ def swebench_limits() -> str:
 
 @mcp.prompt()
 def solve_swebench(problem_statement: str, hints_text: str = "") -> str:
-    """Prompt asking the LLM to fix one SWE-bench issue.
+    """Asks the LLM to fix one SWE-bench bug.
 
     Args:
         problem_statement: the GitHub issue to fix.

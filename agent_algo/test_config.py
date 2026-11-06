@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from agent_algo.agent import ClientLLM, creer_client_cli, creer_clients_secours, url_chat
+from agent_algo.agent import ClientLLM, creer_client_cli, creer_clients_secours, fournisseur_de_depart, url_chat
 from agent_algo.config import ModelsConfig, charger_config
 
 CLES = ("GROQ_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY")
@@ -106,3 +106,26 @@ def test_secours_dans_l_ordre_sans_le_principal_ni_les_cles_manquantes(cles):
     principal = ClientLLM("https://a.test/v1/chat/completions", "autre-modele-de-a", "x")
     secours = creer_clients_secours(principal, config())
     assert [(c.adress, c.modele) for c in secours] == [("https://c.test/v1/chat/completions", "modele-c")]
+
+
+# Examen : le correcteur crée ses clés en direct et peut n'en avoir qu'une partie
+def test_depart_sur_le_fournisseur_par_defaut_s_il_a_une_cle(cles):
+    for nom in ("CLE_A", "CLE_B", "CLE_C"):
+        cles.setenv(nom, "x")
+    assert fournisseur_de_depart(config()) == ("https://b.test/v1/", "modele-b")
+
+
+def test_depart_sur_le_premier_fournisseur_qui_a_une_cle(cles):
+    cles.setenv("CLE_C", "x")
+    cles.setenv("CLE_A", "x")  # pas de CLE_B (le défaut) : a passe avant c, dans l'ordre de providers
+    assert fournisseur_de_depart(config()) == ("https://a.test/v1", "modele-a")
+
+
+def test_depart_avec_le_modele_de_secours_du_fournisseur(cles):
+    cles.setenv("CLE_C", "x")
+    assert fournisseur_de_depart(config()) == ("https://c.test/v1", "modele-c")
+
+
+def test_depart_sans_aucune_cle(cles):
+    with pytest.raises(ValueError, match="CLE_A"):  # le message cite les variables à définir
+        fournisseur_de_depart(config())

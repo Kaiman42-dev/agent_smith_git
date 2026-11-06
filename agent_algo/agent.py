@@ -53,7 +53,7 @@ BUDGET_ALERT = ("\nOnly {restants} step(s) left: stop exploring. Finish your fix
 
 # The tools are no longer listed here: they come from the connected MCP server,
 # and their manual (mcp_bridge.build_manual) is passed to Agent as tools_manual
-PROMPT_SYSTEME = """Tu es un agent qui resout des taches de code.
+CONSIGNES_SYSTEME = """Tu es un agent qui resout des taches de code.
 A chaque tour :
 1. Thought: tu expliques ce que tu vas faire.
 2. Code: tu ecris UN bloc ```python ... ``` qui sera execute. Utilise print() pour voir les resultats.
@@ -93,6 +93,24 @@ def creer_client(index, config: ModelsConfig | None = None):
     return ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles,
                      rpm=fournisseur.rpm)
 
+
+def fournisseur_de_depart(config: ModelsConfig) -> tuple[str, str]:
+    """(url, modèle) du premier client quand aucune option --provider-url / --model-name /
+    --api-key-env n'est donnée (c'est le cas pendant l'examen).
+
+    Le correcteur crée ses clés en direct : il peut n'en avoir qu'une partie. Si la clé du
+    fournisseur par défaut manque, on part du premier fournisseur de `providers` qui a une clé,
+    avec son fallback_model, au lieu de s'arrêter sur une erreur de configuration.
+    Lève ValueError si aucun fournisseur n'a de clé.
+    """
+    defaut = config.fournisseur(config.default_provider)
+    if cles_api(defaut.api_key_env):
+        return defaut.url, config.default_model
+    for fournisseurs in config.providers:
+        if cles_api(fournisseurs.api_key_env):
+            return fournisseurs.url, fournisseurs.fallback_model
+    noms = ", ".join(f.api_key_env for f in config.providers)
+    raise ValueError(f"Définis l'une de ces variables : {noms}")
 
 def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
                      config: ModelsConfig) -> "ClientLLM":
@@ -414,7 +432,7 @@ def raccourcir_anciennes_observations(memoire, garder: int) -> None:
 
 class Agent:
     def __init__(self, question, max_tours, client, sandbox: Sandbox,
-                 prompt_systeme=PROMPT_SYSTEME, tools_manual: str = "",
+                 prompt_systeme=CONSIGNES_SYSTEME, tools_manual: str = "",
                  secours: list | None = None, max_input_tokens: int | None = None,
                  max_output_tokens: int | None = None, fin: float | None = None,
                  alerte_budget: int | None = None, observations_completes: int | None = None,
