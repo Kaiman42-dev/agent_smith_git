@@ -90,7 +90,8 @@ def creer_client(index, config: ModelsConfig | None = None):
     cles = cles_api(fournisseur.api_key_env)
     if not cles:
         raise ValueError(f"Clé API manquante pour {fournisseur.name}. Veuillez définir la variable d'environnement {fournisseur.api_key_env}.")
-    return ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles)
+    return ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles,
+                     rpm=fournisseur.rpm)
 
 
 def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
@@ -101,8 +102,8 @@ def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
     qui a le même domaine que l'URL.
     """
     url = url_chat(provider_url)
+    fournisseur = config.fournisseur_pour_url(url)  # aussi pour son rythme (rpm), s'il est connu
     if api_key_env is None:
-        fournisseur = config.fournisseur_pour_url(url)
         if fournisseur is None:
             host = urllib.parse.urlparse(url).hostname or ""
             raise ValueError(f"Fournisseur inconnu ({host}) : indique la variable de la clé "
@@ -112,7 +113,7 @@ def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
     cles = cles_api(api_key_env)
     if not cles:
         raise ValueError(f"Clé API manquante : la variable d'environnement {api_key_env} n'est pas définie")
-    return ClientLLM(adress=url, modele=modele, key=cles)
+    return ClientLLM(adress=url, modele=modele, key=cles, rpm=fournisseur.rpm if fournisseur else None)
 
 
 def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list["ClientLLM"]:
@@ -129,7 +130,8 @@ def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list[
             continue
         cles = cles_api(fournisseur.api_key_env)
         if cles:
-            secours.append(ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles))
+            secours.append(ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles,
+                                     rpm=fournisseur.rpm))
     return secours
 
 def couper_observation_inventee(texte: str) -> str:
@@ -212,14 +214,18 @@ def generation_refusee(erreur: urllib.error.HTTPError) -> str | None:
 
 
 class ClientLLM:
-    def __init__(self, adress, modele, key):
-        """key : une clé, ou la liste des clés du fournisseur, utilisées à tour de rôle (AS-33)."""
+    def __init__(self, adress, modele, key, rpm: float | None = None):
+        """key : une clé, ou la liste des clés du fournisseur, utilisées à tour de rôle (AS-33).
+        rpm : requêtes par minute autorisées pour chaque clé (None = on envoie sans attendre)."""
         self.adress = adress
         self.modele = modele
         self.cles = [key] if isinstance(key, str) else list(key)
         self.indice_cle = 0
         # heure (time.monotonic()) à partir de laquelle chaque clé peut resservir ; inf = clé refusée
         self.cle_disponible = [0.0] * len(self.cles)
+        # rythme : écart minimal entre deux requêtes d'une même clé, et heure du dernier envoi de chaque clé
+        self.intervalle = 60 / rpm if rpm else 0.0
+        self.dernier_envoi = [-math.inf] * len(self.cles)
         # metriques du dernier appel (lues par l'agent pour remplir solution.json)
         self.input_tokens = 0
         self.output_tokens = 0
@@ -252,6 +258,34 @@ class ClientLLM:
         prochaine = min(self.cle_disponible) - time.monotonic()
         return None if prochaine == math.inf else max(0.0, prochaine)
 
+    def choisir_cle_rythmee(self, maintenant: float) -> float:
+        """Choisit la clé qui pourra envoyer le plus tôt (met à jour self.indice_cle)
+        et renvoie le nombre de secondes à attendre avant d'envoyer avec elle (0 = tout de suite).
+
+        Une clé j peut envoyer quand :
+          - elle n'est plus mise de côté (self.cle_disponible[j], inf = refusée pour toujours),
+          - ET self.intervalle secondes sont passées depuis son dernier envoi (self.dernier_envoi[j]).
+        Si toutes les clés sont refusées (attente infinie), renvoyer math.inf.
+        """
+        ready = [max(self.cle_disponible[j], self.dernier_envoi[j] + self.intervalle) for j in range(len(self.cles))]
+        self.indice_cle = ready.index(min(ready))
+        return max(0.0, ready[self.indice_cle] - maintenant)  # négatif = clé déjà prête : on n'attend pas
+
+
+    def respecter_rythme(self, fin: float | None = None) -> None:
+        """Attend juste ce qu'il faut pour ne pas dépasser `rpm` requêtes par minute et par clé.
+        Le temps passé ailleurs (exécution du code dans Docker...) compte déjà : rien à attendre s'il suffit."""
+        if not self.intervalle:
+            return
+        attente = self.choisir_cle_rythmee(time.monotonic())
+        if attente == math.inf:
+            return  # toutes les clés refusées : l'envoi échouera en 401/403 et l'agent basculera
+        if fin is not None:
+            attente = min(attente, max(0.0, fin - time.monotonic()))  # jamais au-delà de l'heure limite
+        if attente > 0:
+            logging.info(f"{self.modele} : pause de {attente:.1f} s (rythme de {60 / self.intervalle:g} req/min par clé).")
+            time.sleep(attente)
+
     def requete(self, corps: bytes) -> urllib.request.Request:
         return urllib.request.Request(
             self.adress, data=corps,
@@ -281,6 +315,7 @@ class ClientLLM:
         rotations = 0  # changements de clé pendant cet appel : au plus une fois chaque clé
         i = 0
         while i <= 5:
+            self.respecter_rythme(fin)  # peut changer de clé : avant de construire la requête
             requete = self.requete(corps)  # reconstruite à chaque essai : la clé a pu changer
             reste = None if fin is None else fin - time.monotonic()
             if reste is not None and reste < 1:
@@ -288,6 +323,7 @@ class ClientLLM:
                 return None, None
             self.retries = i
             self.total_requetes += 1
+            self.dernier_envoi[self.indice_cle] = time.monotonic()  # même un essai raté compte dans le quota
             debut = time.perf_counter()
             try:
                 with urllib.request.urlopen(requete, timeout=min(40, reste or 40)) as response: #envoie la requete au serveur
@@ -508,8 +544,6 @@ class Agent:
 
         for tour in range(1, self.max_tours + 1):
             self.tour = tour
-            #if tour > 1:
-                #time.sleep(12)
             raison = self.raison_arret(steps, memoire)  # on vérifie le budget AVANT de dépenser
             if raison:
                 return f"Arret de l'agent : {raison}.", steps

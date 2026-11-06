@@ -20,6 +20,9 @@ class Provider(BaseModel):
     api_key_env: str
     # Modèle utilisé quand l'agent bascule sur ce fournisseur
     fallback_model: str
+    # Requêtes par minute autorisées PAR CLÉ (ex. 5 pour Gemini gratuit). None = pas de rythme imposé.
+    # Avec N clés de comptes différents, le fournisseur accepte jusqu'à N * rpm requêtes par minute.
+    rpm: float | None = None
 
     @property
     def host(self) -> str:

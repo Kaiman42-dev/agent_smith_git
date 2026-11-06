@@ -18,7 +18,8 @@
             "name": "gemini",
             "url": "https://generativelanguage.googleapis.com/v1beta/openai",
             "api_key_env": "GEMINI_API_KEY",
-            "fallback_model": "gemini-3.6-flash"
+            "fallback_model": "gemini-3.6-flash",
+            "rpm": 5
         }
     ],
     "benchmark_models": [
