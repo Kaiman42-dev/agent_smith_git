@@ -12,7 +12,7 @@
             "name": "openrouter",
             "url": "https://openrouter.ai/api/v1",
             "api_key_env": "OPENROUTER_API_KEY",
-            "fallback_model": "cohere/north-mini-code:free"
+            "fallback_model": "nvidia/nemotron-3.5-super-vl:free"
         },
         {
             "name": "gemini",
@@ -24,9 +24,14 @@
     ],
     "benchmark_models": [
         {"provider": "gemini", "model": "gemini-3.6-flash"},
+        {"provider": "gemini", "model": "gemini-3.5-flash"},
+        {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
+        {"provider": "gemini", "model": "gemini-3.1-flash-lite"},
         {"provider": "groq", "model": "openai/gpt-oss-120b"},
-        {"provider": "groq", "model": "openai/gpt-oss-20b"},
         {"provider": "groq", "model": "qwen/qwen3.8-27b"},
-        {"provider": "openrouter", "model": "cohere/north-mini-code:free"}
+        {"provider": "openrouter", "model": "nvidia/nemotron-3.5-super-vl:free"},
+        {"provider": "openrouter", "model": "nvidia/nemotron-3.5-lightning:free"},
+        {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
+        {"provider": "openrouter", "model": "dots-studio/dots-3-note-preview:free"}
     ]
 }

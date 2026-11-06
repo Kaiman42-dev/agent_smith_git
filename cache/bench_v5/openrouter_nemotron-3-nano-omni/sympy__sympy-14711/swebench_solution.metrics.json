@@ -1,0 +1,77 @@
+{
+  "task_id": "sympy__sympy-14711",
+  "benchmark": "swebench",
+  "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+  "provider": "openrouter",
+  "models_used": [
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+  ],
+  "success": false,
+  "iterations": 12,
+  "total_input_tokens": 41120,
+  "total_output_tokens": 10000,
+  "input_tokens_per_step": [
+    1848,
+    1965,
+    2139,
+    2199,
+    2375,
+    3186,
+    3331,
+    5208,
+    5356,
+    4917,
+    5023,
+    3573
+  ],
+  "output_tokens_per_step": [
+    2000,
+    75,
+    2000,
+    67,
+    41,
+    475,
+    1500,
+    374,
+    128,
+    1840,
+    788,
+    712
+  ],
+  "total_time_seconds": 154.8760540485382,
+  "request_time_ms_per_step": [
+    28932.35308400017,
+    1349.4849999997314,
+    22092.11391700046,
+    1602.040957999634,
+    1186.6700839991609,
+    7346.203208000588,
+    18096.066957999938,
+    5228.861833000337,
+    2171.864375000041,
+    20453.235582999696,
+    7672.480166000241,
+    18451.120959000036
+  ],
+  "total_requests": 14,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "error": "429"
+    },
+    {
+      "step": 1,
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [],
+  "first_patch_file_step": null,
+  "test_failures": [],
+  "first_failure_drop_step": null,
+  "tests_pass_step": null,
+  "steps_after_tests_pass": null
+}
