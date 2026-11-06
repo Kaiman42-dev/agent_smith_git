@@ -28,5 +28,8 @@
         {"provider": "openrouter", "model": "nvidia/nemotron-3.5-lightning:free"},
         {"provider": "openrouter", "model": "dots-studio/dots-3-note-preview:free"},
         {"provider": "openrouter", "model": "nvidia/nemotron-3.5-super-vl:free"}
-    ]
+    ],
+    "options_par_modele": {
+        "openai/gpt-oss-120b": {"reasoning_effort": "low"}
+    }
 }

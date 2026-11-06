@@ -129,3 +129,32 @@ def test_depart_avec_le_modele_de_secours_du_fournisseur(cles):
 def test_depart_sans_aucune_cle(cles):
     with pytest.raises(ValueError, match="CLE_A"):  # le message cite les variables à définir
         fournisseur_de_depart(config())
+
+
+# options_par_modele : paramètres ajoutés aux requêtes d'un modèle précis (ex. reasoning_effort)
+def test_options_seulement_pour_le_modele_configure(cles):
+    cles.setenv("CLE_B", "x")
+    conf = config(options_par_modele={"modele-b": {"reasoning_effort": "low"}})
+    assert creer_client_cli("https://b.test/v1", "modele-b", None, conf).options == {"reasoning_effort": "low"}
+    assert creer_client_cli("https://b.test/v1", "autre-modele", None, conf).options == {}  # même fournisseur
+
+
+def test_options_vides_par_defaut():
+    assert config().options("modele-a") == {}
+
+
+def test_les_options_partent_dans_la_requete_sans_ecraser_l_essentiel(monkeypatch):
+    import io
+    import urllib.request
+    envoye = {}
+
+    def faux_urlopen(requete, timeout=None):
+        envoye.update(json.loads(requete.data))
+        return io.BytesIO(b'{"choices": [{"message": {"content": "ok"}}], "usage": {}}')
+
+    monkeypatch.setattr(urllib.request, "urlopen", faux_urlopen)
+    client = ClientLLM("https://b.test/v1/chat/completions", "modele-b", "x",
+                       options={"reasoning_effort": "low", "model": "pirate"})
+    client.appel_llm([{"role": "user", "content": "q"}], max_tokens=50)
+    assert envoye["reasoning_effort"] == "low"
+    assert envoye["model"] == "modele-b" and envoye["max_tokens"] == 50  # l'essentiel reste prioritaire

@@ -86,12 +86,13 @@ def cles_api(nom_variable: str) -> list[str]:
 
 def creer_client(index, config: ModelsConfig | None = None):
     """créé un nv client LLM à partir de l'index du fournisseur dans models.json"""
-    fournisseur = (config or charger_config()).providers[index]
+    config = config or charger_config()
+    fournisseur = config.providers[index]
     cles = cles_api(fournisseur.api_key_env)
     if not cles:
         raise ValueError(f"Clé API manquante pour {fournisseur.name}. Veuillez définir la variable d'environnement {fournisseur.api_key_env}.")
     return ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles,
-                     rpm=fournisseur.rpm)
+                     rpm=fournisseur.rpm, options=config.options(fournisseur.fallback_model))
 
 
 def fournisseur_de_depart(config: ModelsConfig) -> tuple[str, str]:
@@ -131,7 +132,8 @@ def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
     cles = cles_api(api_key_env)
     if not cles:
         raise ValueError(f"Clé API manquante : la variable d'environnement {api_key_env} n'est pas définie")
-    return ClientLLM(adress=url, modele=modele, key=cles, rpm=fournisseur.rpm if fournisseur else None)
+    return ClientLLM(adress=url, modele=modele, key=cles, rpm=fournisseur.rpm if fournisseur else None,
+                     options=config.options(modele))
 
 
 def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list["ClientLLM"]:
@@ -149,7 +151,7 @@ def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list[
         cles = cles_api(fournisseur.api_key_env)
         if cles:
             secours.append(ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles,
-                                     rpm=fournisseur.rpm))
+                                     rpm=fournisseur.rpm, options=config.options(fournisseur.fallback_model)))
     return secours
 
 # "Final Answer:" comme le demande le prompt, mais aussi ce qu'écrivent les modèles :
@@ -243,11 +245,13 @@ def generation_refusee(erreur: urllib.error.HTTPError) -> str | None:
 
 
 class ClientLLM:
-    def __init__(self, adress, modele, key, rpm: float | None = None):
+    def __init__(self, adress, modele, key, rpm: float | None = None, options: dict | None = None):
         """key : une clé, ou la liste des clés du fournisseur, utilisées à tour de rôle (AS-33).
-        rpm : requêtes par minute autorisées pour chaque clé (None = on envoie sans attendre)."""
+        rpm : requêtes par minute autorisées pour chaque clé (None = on envoie sans attendre).
+        options : paramètres ajoutés à chaque requête (options_par_modele de models.json)."""
         self.adress = adress
         self.modele = modele
+        self.options = dict(options or {})
         self.cles = [key] if isinstance(key, str) else list(key)
         self.indice_cle = 0
         # heure (time.monotonic()) à partir de laquelle chaque clé peut resservir ; inf = clé refusée
@@ -332,7 +336,8 @@ class ClientLLM:
         max_tokens : nombre maximal de tokens que le modèle peut générer (budget restant).
         fin : heure limite (time.monotonic()) ; aucun essai ni aucune attente ne la dépasse.
         """
-        options = {"model": self.modele, "messages": messages, "stream": False}
+        # les options du modèle d'abord : model / messages / stream / max_tokens restent prioritaires
+        options = {**self.options, "model": self.modele, "messages": messages, "stream": False}
         if max_tokens is not None:
             options["max_tokens"] = max_tokens
         corps = json.dumps(options).encode()
