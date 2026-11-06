@@ -1,0 +1,194 @@
+{
+  "task_id": "sympy__sympy-14711",
+  "benchmark": "swebench",
+  "model": "qwen/qwen3.8-27b",
+  "provider": "groq",
+  "models_used": [
+    "qwen/qwen3.8-27b"
+  ],
+  "success": true,
+  "iterations": 14,
+  "total_input_tokens": 53664,
+  "total_output_tokens": 1071,
+  "input_tokens_per_step": [
+    1881,
+    2371,
+    2648,
+    2934,
+    3582,
+    3556,
+    4196,
+    4232,
+    4175,
+    4358,
+    4064,
+    4226,
+    5181,
+    6260
+  ],
+  "output_tokens_per_step": [
+    52,
+    66,
+    38,
+    55,
+    132,
+    36,
+    41,
+    34,
+    142,
+    39,
+    33,
+    63,
+    313,
+    27
+  ],
+  "total_time_seconds": 77.75680804252625,
+  "request_time_ms_per_step": [
+    644.598834000135,
+    673.1975410002633,
+    748.9903750001758,
+    651.2940410002557,
+    818.6854579998908,
+    790.2707499997632,
+    1192.8412500001286,
+    756.9252080002116,
+    1034.1702080004325,
+    903.223166999851,
+    736.185500000829,
+    917.345750000095,
+    1377.9975000006743,
+    1017.027459000019
+  ],
+  "total_requests": 36,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 4,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 6,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 7,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 8,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 8,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 8,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 9,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 10,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 11,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 11,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 12,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 12,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 12,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 12,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 13,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 13,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 14,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 14,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 14,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 14,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 14,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 14,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [
+    "sympy/physics/vector/vector.py"
+  ],
+  "first_patch_file_step": 1,
+  "test_failures": [
+    {
+      "step": 12,
+      "failures": 0
+    },
+    {
+      "step": 13,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": null,
+  "tests_pass_step": 12,
+  "steps_after_tests_pass": 2
+}

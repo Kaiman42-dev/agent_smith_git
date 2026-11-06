@@ -1,0 +1,196 @@
+{
+  "task_id": "sympy__sympy-14711",
+  "benchmark": "swebench",
+  "model": "openai/gpt-oss-120b",
+  "provider": "groq",
+  "models_used": [
+    "openai/gpt-oss-120b"
+  ],
+  "success": true,
+  "iterations": 13,
+  "total_input_tokens": 56270,
+  "total_output_tokens": 3492,
+  "input_tokens_per_step": [
+    2413,
+    3537,
+    3614,
+    3705,
+    3796,
+    3893,
+    3090,
+    4528,
+    5765,
+    5089,
+    5333,
+    5391,
+    6116
+  ],
+  "output_tokens_per_step": [
+    12,
+    23,
+    37,
+    37,
+    43,
+    37,
+    643,
+    1257,
+    552,
+    742,
+    35,
+    26,
+    48
+  ],
+  "total_time_seconds": 62.344741106033325,
+  "request_time_ms_per_step": [
+    688.7281250001251,
+    886.339874999976,
+    840.4834590000974,
+    1125.174374999915,
+    718.4677499999452,
+    994.5733329996074,
+    1861.1715420001929,
+    3361.811291999402,
+    1983.4161250000761,
+    2231.3950830002796,
+    930.6418339992888,
+    605.1540420003221,
+    979.0485840003385
+  ],
+  "total_requests": 29,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 2,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 3,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 4,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 4,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 5,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 6,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 6,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 8,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 9,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 9,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 9,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 9,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 10,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 10,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 10,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 10,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 10,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 10,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 12,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 13,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 13,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [
+    "sympy/physics/vector/vector.py"
+  ],
+  "first_patch_file_step": 7,
+  "test_failures": [
+    {
+      "step": 1,
+      "failures": 0
+    },
+    {
+      "step": 12,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": null,
+  "tests_pass_step": 1,
+  "steps_after_tests_pass": 12
+}
