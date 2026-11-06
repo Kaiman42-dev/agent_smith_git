@@ -1,9 +1,9 @@
 import argparse
 import json
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 from outils import code_search_tools, execution_tools, file_systeme_tool
 
-mcp = MCPServer("swebench")
+mcp = FastMCP("swebench")
 
 @mcp.tool()
 def read_file(filepath: str, start_line: int, end_line: int) -> str:
@@ -173,6 +173,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     if args.http:
-        mcp.run("streamable-http", host=args.host, port=args.port)
+        mcp.settings.host, mcp.settings.port = args.host, args.port  # mcp 1.x : pas d'argument dans run()
+        mcp.run("streamable-http")
     else:
         mcp.run()

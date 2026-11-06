@@ -41,7 +41,7 @@ def make_tool(client, tool_name: str, description: str | None = None,
             kwargs[name] = value
         result = client.call_tool(tool_name, kwargs)
         text = _result_to_text(result)
-        if result.is_error:
+        if result.isError:
             raise RuntimeError(f"{tool_name}: {text}")
         return text
 
@@ -55,7 +55,7 @@ def build_tools(client) -> dict:
     """Returns {tool_name: function} for every tool of the connected server."""
     # the schema keeps the order of the parameters: it is used to name positional arguments
     return {tool.name: make_tool(client, tool.name, tool.description,
-                                 list((tool.input_schema or {}).get("properties", {})))
+                                 list((tool.inputSchema or {}).get("properties", {})))
             for tool in client.list_tools()}
 
 
@@ -73,7 +73,7 @@ def _schema_to_type(schema: dict) -> str:
 
 def _tool_stub(tool) -> str:
     # Writes the tool as a Python function: signature + docstring
-    schema = tool.input_schema or {}
+    schema = tool.inputSchema or {}
     required = set(schema.get("required", []))
     params, params_doc = [], []
     for name, prop in schema.get("properties", {}).items():

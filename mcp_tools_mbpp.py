@@ -4,11 +4,11 @@ import os
 import subprocess
 import sys
 import tempfile
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 
 TIMEOUT = 10
 
-mcp = MCPServer("mbpp")
+mcp = FastMCP("mbpp")
 
 @mcp.tool()
 def run_tests(code: str, test_list: list[str]) -> str:
@@ -78,6 +78,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     if args.http:
-        mcp.run("streamable-http", host=args.host, port=args.port)
+        mcp.settings.host, mcp.settings.port = args.host, args.port  # mcp 1.x : pas d'argument dans run()
+        mcp.run("streamable-http")
     else:
         mcp.run()
