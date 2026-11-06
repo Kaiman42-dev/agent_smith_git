@@ -35,7 +35,8 @@ def cles(monkeypatch):
 def test_le_models_json_du_depot_est_valide():
     conf = charger_config()
     assert [p.name for p in conf.providers] == ["groq", "openrouter", "gemini"]  # ordre de bascule
-    assert conf.fournisseur(conf.default_provider).name == "gemini"
+    # on commence par Groq : Gemini (5 requêtes par minute en gratuit) n'est utilisé qu'en dernier recours
+    assert conf.fournisseur(conf.default_provider).name == "groq"
     assert all(p.api_key_env.endswith("_API_KEY") for p in conf.providers)  # des noms, pas des clés
 
 
