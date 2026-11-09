@@ -30,6 +30,13 @@ MAX_ATTENTES_QUOTA = 30
 
 MAX_OBSERVATION = 5000  # sert a couper les observations trop longues pour ne pas exploser le contexte
 
+# Chaque appel renvoie toute la conversation : sans ça, une lecture de fichier faite au tour 3
+# est repayée à chacun des tours suivants. On garde le début et la fin des anciennes observations
+# (la fin d'une sortie de tests contient la traceback)
+DEBUT_ANCIENNE = 300
+FIN_ANCIENNE = 300
+OLD_NOTE = "\n[... old observation shortened ...]\n"
+
 # Added to the next observation when the LLM's reply had to be cut
 CUT_NOTE = ("\n(Note: your reply was cut at 'Observation:'. Observations come "
             "from the sandbox: never write them yourself.)")
@@ -38,9 +45,15 @@ CUT_NOTE = ("\n(Note: your reply was cut at 'Observation:'. Observations come "
 FORMAT_REMINDER = ("Your reply contained no ```python block and no final answer. "
                    "Reply with ONE ```python block, or give your final answer.")
 
+# Added to every observation when the caller asks for it (alerte_budget): without it the
+# LLM does not know how many steps it has left, and keeps exploring until the limit
+BUDGET_NOTE = "\n[Budget: step {tour}/{max_tours}, about {restants} step(s) left]"
+BUDGET_ALERT = ("\nOnly {restants} step(s) left: stop exploring. Finish your fix now "
+                "and submit it with final_answer().")
+
 # The tools are no longer listed here: they come from the connected MCP server,
 # and their manual (mcp_bridge.build_manual) is passed to Agent as tools_manual
-PROMPT_SYSTEME = """Tu es un agent qui resout des taches de code.
+CONSIGNES_SYSTEME = """Tu es un agent qui resout des taches de code.
 A chaque tour :
 1. Thought: tu expliques ce que tu vas faire.
 2. Code: tu ecris UN bloc ```python ... ``` qui sera execute. Utilise print() pour voir les resultats.
@@ -50,6 +63,7 @@ Les variables sont conservees d'un tour a l'autre.
 Quand tu as la reponse finale, appelle final_answer(reponse) dans ton code,
 ou reponds SANS bloc ```python```, en commencant par "Final Answer:".
 """
+
 def url_chat(url: str) -> str:
     """--provider-url et models.json donnent l'url de base, ClientLLM veut l'url complete"""
     url = url.rstrip("/")
@@ -72,12 +86,32 @@ def cles_api(nom_variable: str) -> list[str]:
 
 def creer_client(index, config: ModelsConfig | None = None):
     """créé un nv client LLM à partir de l'index du fournisseur dans models.json"""
-    fournisseur = (config or charger_config()).providers[index]
+    config = config or charger_config()
+    fournisseur = config.providers[index]
     cles = cles_api(fournisseur.api_key_env)
     if not cles:
         raise ValueError(f"Clé API manquante pour {fournisseur.name}. Veuillez définir la variable d'environnement {fournisseur.api_key_env}.")
-    return ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles)
+    return ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles,
+                     rpm=fournisseur.rpm, options=config.options(fournisseur.fallback_model))
 
+
+def fournisseur_de_depart(config: ModelsConfig) -> tuple[str, str]:
+    """(url, modèle) du premier client quand aucune option --provider-url / --model-name /
+    --api-key-env n'est donnée (c'est le cas pendant l'examen).
+
+    Le correcteur crée ses clés en direct : il peut n'en avoir qu'une partie. Si la clé du
+    fournisseur par défaut manque, on part du premier fournisseur de `providers` qui a une clé,
+    avec son fallback_model, au lieu de s'arrêter sur une erreur de configuration.
+    Lève ValueError si aucun fournisseur n'a de clé.
+    """
+    defaut = config.fournisseur(config.default_provider)
+    if cles_api(defaut.api_key_env):
+        return defaut.url, config.default_model
+    for fournisseurs in config.providers:
+        if cles_api(fournisseurs.api_key_env):
+            return fournisseurs.url, fournisseurs.fallback_model
+    noms = ", ".join(f.api_key_env for f in config.providers)
+    raise ValueError(f"Définis l'une de ces variables : {noms}")
 
 def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
                      config: ModelsConfig) -> "ClientLLM":
@@ -87,8 +121,8 @@ def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
     qui a le même domaine que l'URL.
     """
     url = url_chat(provider_url)
+    fournisseur = config.fournisseur_pour_url(url)  # aussi pour son rythme (rpm), s'il est connu
     if api_key_env is None:
-        fournisseur = config.fournisseur_pour_url(url)
         if fournisseur is None:
             host = urllib.parse.urlparse(url).hostname or ""
             raise ValueError(f"Fournisseur inconnu ({host}) : indique la variable de la clé "
@@ -98,7 +132,8 @@ def creer_client_cli(provider_url: str, modele: str, api_key_env: str | None,
     cles = cles_api(api_key_env)
     if not cles:
         raise ValueError(f"Clé API manquante : la variable d'environnement {api_key_env} n'est pas définie")
-    return ClientLLM(adress=url, modele=modele, key=cles)
+    return ClientLLM(adress=url, modele=modele, key=cles, rpm=fournisseur.rpm if fournisseur else None,
+                     options=config.options(modele))
 
 
 def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list["ClientLLM"]:
@@ -115,8 +150,20 @@ def creer_clients_secours(principal: "ClientLLM", config: ModelsConfig) -> list[
             continue
         cles = cles_api(fournisseur.api_key_env)
         if cles:
-            secours.append(ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles))
+            secours.append(ClientLLM(adress=url_chat(fournisseur.url), modele=fournisseur.fallback_model, key=cles,
+                                     rpm=fournisseur.rpm, options=config.options(fournisseur.fallback_model)))
     return secours
+
+# "Final Answer:" comme le demande le prompt, mais aussi ce qu'écrivent les modèles :
+# "**Final answer**:", "**Final Answer:**", "Final answer :", "FINAL ANSWER:"...
+FINAL_ANSWER = re.compile(r"\*{0,2}\s*final answer\s*\*{0,2}\s*:\s*\*{0,2}", re.IGNORECASE)
+
+
+def reponse_finale(contenu: str) -> str | None:
+    """Ce qui suit le dernier "Final Answer:" de la réponse, None s'il n'y en a pas."""
+    morceaux = FINAL_ANSWER.split(contenu)
+    return morceaux[-1].strip() if len(morceaux) > 1 else None
+
 
 def couper_observation_inventee(texte: str) -> str:
     """Coupe la réponse du LLM là où il commence à inventer le résultat de son code (sujet, V.6).
@@ -198,14 +245,20 @@ def generation_refusee(erreur: urllib.error.HTTPError) -> str | None:
 
 
 class ClientLLM:
-    def __init__(self, adress, modele, key):
-        """key : une clé, ou la liste des clés du fournisseur, utilisées à tour de rôle (AS-33)."""
+    def __init__(self, adress, modele, key, rpm: float | None = None, options: dict | None = None):
+        """key : une clé, ou la liste des clés du fournisseur, utilisées à tour de rôle (AS-33).
+        rpm : requêtes par minute autorisées pour chaque clé (None = on envoie sans attendre).
+        options : paramètres ajoutés à chaque requête (options_par_modele de models.json)."""
         self.adress = adress
         self.modele = modele
+        self.options = dict(options or {})
         self.cles = [key] if isinstance(key, str) else list(key)
         self.indice_cle = 0
         # heure (time.monotonic()) à partir de laquelle chaque clé peut resservir ; inf = clé refusée
         self.cle_disponible = [0.0] * len(self.cles)
+        # rythme : écart minimal entre deux requêtes d'une même clé, et heure du dernier envoi de chaque clé
+        self.intervalle = 60 / rpm if rpm else 0.0
+        self.dernier_envoi = [-math.inf] * len(self.cles)
         # metriques du dernier appel (lues par l'agent pour remplir solution.json)
         self.input_tokens = 0
         self.output_tokens = 0
@@ -238,6 +291,34 @@ class ClientLLM:
         prochaine = min(self.cle_disponible) - time.monotonic()
         return None if prochaine == math.inf else max(0.0, prochaine)
 
+    def choisir_cle_rythmee(self, maintenant: float) -> float:
+        """Choisit la clé qui pourra envoyer le plus tôt (met à jour self.indice_cle)
+        et renvoie le nombre de secondes à attendre avant d'envoyer avec elle (0 = tout de suite).
+
+        Une clé j peut envoyer quand :
+          - elle n'est plus mise de côté (self.cle_disponible[j], inf = refusée pour toujours),
+          - ET self.intervalle secondes sont passées depuis son dernier envoi (self.dernier_envoi[j]).
+        Si toutes les clés sont refusées (attente infinie), renvoyer math.inf.
+        """
+        ready = [max(self.cle_disponible[j], self.dernier_envoi[j] + self.intervalle) for j in range(len(self.cles))]
+        self.indice_cle = ready.index(min(ready))
+        return max(0.0, ready[self.indice_cle] - maintenant)  # négatif = clé déjà prête : on n'attend pas
+
+
+    def respecter_rythme(self, fin: float | None = None) -> None:
+        """Attend juste ce qu'il faut pour ne pas dépasser `rpm` requêtes par minute et par clé.
+        Le temps passé ailleurs (exécution du code dans Docker...) compte déjà : rien à attendre s'il suffit."""
+        if not self.intervalle:
+            return
+        attente = self.choisir_cle_rythmee(time.monotonic())
+        if attente == math.inf:
+            return  # toutes les clés refusées : l'envoi échouera en 401/403 et l'agent basculera
+        if fin is not None:
+            attente = min(attente, max(0.0, fin - time.monotonic()))  # jamais au-delà de l'heure limite
+        if attente > 0:
+            logging.info(f"{self.modele} : pause de {attente:.1f} s (rythme de {60 / self.intervalle:g} req/min par clé).")
+            time.sleep(attente)
+
     def requete(self, corps: bytes) -> urllib.request.Request:
         return urllib.request.Request(
             self.adress, data=corps,
@@ -255,7 +336,8 @@ class ClientLLM:
         max_tokens : nombre maximal de tokens que le modèle peut générer (budget restant).
         fin : heure limite (time.monotonic()) ; aucun essai ni aucune attente ne la dépasse.
         """
-        options = {"model": self.modele, "messages": messages, "stream": False}
+        # les options du modèle d'abord : model / messages / stream / max_tokens restent prioritaires
+        options = {**self.options, "model": self.modele, "messages": messages, "stream": False}
         if max_tokens is not None:
             options["max_tokens"] = max_tokens
         corps = json.dumps(options).encode()
@@ -267,6 +349,7 @@ class ClientLLM:
         rotations = 0  # changements de clé pendant cet appel : au plus une fois chaque clé
         i = 0
         while i <= 5:
+            self.respecter_rythme(fin)  # peut changer de clé : avant de construire la requête
             requete = self.requete(corps)  # reconstruite à chaque essai : la clé a pu changer
             reste = None if fin is None else fin - time.monotonic()
             if reste is not None and reste < 1:
@@ -274,6 +357,7 @@ class ClientLLM:
                 return None, None
             self.retries = i
             self.total_requetes += 1
+            self.dernier_envoi[self.indice_cle] = time.monotonic()  # même un essai raté compte dans le quota
             debut = time.perf_counter()
             try:
                 with urllib.request.urlopen(requete, timeout=min(40, reste or 40)) as response: #envoie la requete au serveur
@@ -350,16 +434,36 @@ def taille(memoire) -> int:
     return sum(len(m["content"]) for m in memoire)
 
 
+def raccourcir_anciennes_observations(memoire, garder: int) -> None:
+    """Raccourcit (sur place) toutes les observations sauf les `garder` dernières :
+    on garde leur début et leur fin, le milieu est remplacé par OLD_NOTE."""
+    observations = [m for m in memoire if m["role"] == "user" and m["content"].startswith("Observation:")]
+    anciennes = observations[:-garder] if garder > 0 else observations
+    for m in anciennes:
+        texte = m["content"]
+        if OLD_NOTE in texte or len(texte) <= DEBUT_ANCIENNE + FIN_ANCIENNE + len(OLD_NOTE):
+            continue  # déjà raccourcie, ou trop courte pour que ça vaille le coup
+        m["content"] = texte[:DEBUT_ANCIENNE] + OLD_NOTE + texte[-FIN_ANCIENNE:]
+
+
 class Agent:
     def __init__(self, question, max_tours, client, sandbox: Sandbox,
-                 prompt_systeme=PROMPT_SYSTEME, tools_manual: str = "",
+                 prompt_systeme=CONSIGNES_SYSTEME, tools_manual: str = "",
                  secours: list | None = None, max_input_tokens: int | None = None,
-                 max_output_tokens: int | None = None, fin: float | None = None):
+                 max_output_tokens: int | None = None, fin: float | None = None,
+                 alerte_budget: int | None = None, observations_completes: int | None = None,
+                 max_tokens_par_tour: int | None = None):
         """sandbox: created by the caller, who chooses its MCP tools.
         tools_manual: tool documentation appended to the system prompt.
         secours: clients LLM de secours, essayés dans l'ordre si le client actuel ne répond plus.
         max_input_tokens, max_output_tokens : budget de tokens pour toute la tâche (sujet, VI.1).
-        fin : heure limite de la tâche (time.monotonic()). None = pas de limite."""
+        fin : heure limite de la tâche (time.monotonic()). None = pas de limite.
+        alerte_budget : si donné, chaque observation dit au LLM combien de tours il lui reste, et
+            lui demande de conclure à partir de ce nombre de tours restants. None = rien n'est ajouté.
+        observations_completes : si donné, seules les N dernières observations restent entières dans
+            la conversation, les plus anciennes sont raccourcies. None = on garde tout.
+        max_tokens_par_tour : si donné, aucun appel ne peut générer plus de tokens que ça (en plus
+            de max_output_tokens pour toute la tâche). None = seul le budget restant compte."""
         self.question = question
         self.max_tours = max_tours
         self.client = client
@@ -372,6 +476,9 @@ class Agent:
         self.max_input_tokens = max_input_tokens
         self.max_output_tokens = max_output_tokens
         self.fin = fin
+        self.alerte_budget = alerte_budget
+        self.observations_completes = observations_completes
+        self.max_tokens_par_tour = max_tokens_par_tour
         self.taille_dernier_envoi = 0  # caractères envoyés au dernier appel
         # pour les metriques du benchmark (agent_algo/metriques.py) : ce que solution.json ne garde pas
         self.tour = 0
@@ -400,6 +507,22 @@ class Agent:
                 return (f"limite de tokens d'entrée atteinte ({entree} utilisés, "
                         f"~{prochain} pour le prochain appel, limite {self.max_input_tokens})")
         return None
+
+
+    def note_budget(self, tour, steps) -> str:
+        """Fin d'observation qui donne au LLM ses tours restants (alerte_budget).
+        steps : les tours précédents, sans le tour en cours."""
+        if self.alerte_budget is None:
+            return ""
+        restants = self.max_tours - tour
+        if self.max_input_tokens is not None and self.client.input_tokens:
+            # chaque appel coûte au moins autant que celui-ci : estimation optimiste
+            entree = sum(s.input_tokens for s in steps) + self.client.input_tokens
+            restants = min(restants, max(0, self.max_input_tokens - entree) // self.client.input_tokens)
+        note = BUDGET_NOTE.format(tour=tour, max_tours=self.max_tours, restants=restants)
+        if restants <= self.alerte_budget:
+            note += BUDGET_ALERT.format(restants=restants)
+        return note
 
 
     def attendre_quota(self) -> bool:
@@ -461,6 +584,8 @@ class Agent:
             self.taille_dernier_envoi = taille(memoire)
             restant = None if self.max_output_tokens is None else \
                 self.max_output_tokens - sum(s.output_tokens for s in steps)
+            if self.max_tokens_par_tour is not None:
+                restant = self.max_tokens_par_tour if restant is None else min(restant, self.max_tokens_par_tour)
             message, code_erreur = self.appeler_llm(memoire, restant) # parti de thinking
             if message is None:  # plus aucun fournisseur ne repond : on arrete
                 if self.temps_ecoule():
@@ -470,18 +595,30 @@ class Agent:
             contenu = couper_observation_inventee(brut)  # on garde seulement ce qui précède l'observation inventée
             # some APIs reject an empty assistant message, so store a placeholder
             memoire.append({"role": "assistant", "content": contenu or "(empty reply)"}) # je sauvegarde la reponse du llm en mémoire
+            budget = self.note_budget(tour, steps)  # avant steps.append : steps = les tours précédents
 
             # "Final Answer:" est prioritaire : le llm recopie parfois du code dans son raisonnement final
             # bloc python, ou appel XML / JSON / ReAct converti en python
-            code = None if "Final Answer:" in contenu else extraire_code(contenu)  # parti code
+            finale = reponse_finale(contenu)
+            code = None if finale is not None else extraire_code(contenu)  # parti code
             observation = ""
             result = None
+            arret = None  # exit() ou Ctrl+C dans le code du LLM
             if code is not None:
-                # the sandbox keeps the LLM's variables from one step to the next
-                result = self.sandbox.execute(code)  # parti observe
-                observation = format_observation(result)
-                note = CUT_NOTE if contenu != brut else ""  # le LLM ne doit jamais deviner pourquoi
-                memoire.append({"role": "user", "content": f"Observation:\n{observation}{note}"})
+                try:
+                    # the sandbox keeps the LLM's variables from one step to the next
+                    result = self.sandbox.execute(code)  # parti observe
+                except (SystemExit, KeyboardInterrupt) as e:
+                    # elles remontent jusqu'ici (sujet, V.2) : on note le tour, puis on s'arrête
+                    # proprement, pour que solution.json soit quand même écrit
+                    arret = f"{type(e).__name__} raised by the code, the agent stopped"
+                    observation = arret
+                else:
+                    observation = format_observation(result)
+                    note = CUT_NOTE if contenu != brut else ""  # le LLM ne doit jamais deviner pourquoi
+                    memoire.append({"role": "user", "content": f"Observation:\n{observation}{note}{budget}"})
+                    if self.observations_completes is not None:
+                        raccourcir_anciennes_observations(memoire, self.observations_completes)
 
             steps.append(StepMetrics(
                 step=tour,
@@ -496,18 +633,21 @@ class Agent:
                 sandbox_output=observation,
             ))
 
+            if arret is not None:
+                return f"Arret de l'agent : {arret}.", steps
+
             if result is not None and result.final_answer is not None:
                 self.succes = True  # the code called final_answer()
                 return result.final_answer, steps
 
-            if "Final Answer:" in contenu:
+            if finale is not None:
                 self.succes = True
-                return contenu.split("Final Answer:")[-1].strip(), steps
+                return finale, steps
 
             if code is None:
                 # Neither code nor final answer (e.g. an empty reply): do not
                 # stop, remind the format. max_tours still bounds the loop
-                memoire.append({"role": "user", "content": FORMAT_REMINDER})
+                memoire.append({"role": "user", "content": FORMAT_REMINDER + budget})
 
         return "nombre maximum de tours atteint", steps
 

@@ -1,0 +1,561 @@
+{
+  "task_id": "sympy__sympy-14711",
+  "benchmark": "swebench",
+  "model": "openai/gpt-oss-20b",
+  "provider": "groq",
+  "models_used": [
+    "openai/gpt-oss-20b"
+  ],
+  "success": false,
+  "iterations": 30,
+  "total_input_tokens": 191772,
+  "total_output_tokens": 1260,
+  "input_tokens_per_step": [
+    2413,
+    2744,
+    4303,
+    4726,
+    4821,
+    4919,
+    5017,
+    5115,
+    5214,
+    5314,
+    6695,
+    6789,
+    6884,
+    6979,
+    7073,
+    7172,
+    7266,
+    7361,
+    7456,
+    7551,
+    7649,
+    7743,
+    7841,
+    7936,
+    7925,
+    8051,
+    8176,
+    7014,
+    7139,
+    6486
+  ],
+  "output_tokens_per_step": [
+    30,
+    27,
+    41,
+    41,
+    44,
+    44,
+    44,
+    45,
+    45,
+    28,
+    40,
+    40,
+    40,
+    40,
+    44,
+    40,
+    40,
+    40,
+    40,
+    44,
+    40,
+    44,
+    40,
+    35,
+    41,
+    40,
+    95,
+    40,
+    44,
+    44
+  ],
+  "total_time_seconds": 243.25055503845215,
+  "request_time_ms_per_step": [
+    657.6167920002263,
+    2566.301625000051,
+    1594.2793329995766,
+    1283.359209000082,
+    1583.6902500004726,
+    1030.2247910003643,
+    1579.4553330006238,
+    1526.5591249999488,
+    2642.42912500049,
+    1189.1314169997713,
+    2268.943417000628,
+    1434.0552499998012,
+    916.5864999995392,
+    1021.5157500006171,
+    1465.1852080005483,
+    824.9579170005745,
+    979.3355829997381,
+    713.6884999999893,
+    1250.2492080002412,
+    1239.1185830001632,
+    1044.0935830001763,
+    1336.8703750002169,
+    1399.099290999402,
+    1461.125875000107,
+    1521.5417079998588,
+    1088.6770000006436,
+    1736.7379580000488,
+    862.5477079995107,
+    2315.071957999862,
+    2937.970874999337
+  ],
+  "total_requests": 89,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 2,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 3,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 4,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 4,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 5,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 5,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 6,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 6,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 7,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 7,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 7,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 7,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 8,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 8,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 9,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 9,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 10,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 10,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 10,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 12,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 12,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 12,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 13,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 13,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 13,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 13,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 14,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 14,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 15,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 15,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 15,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 15,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 15,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 16,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 16,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 16,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 16,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 16,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 17,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 17,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 17,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 18,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 18,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 18,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 19,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 19,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 19,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 20,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 20,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 20,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 20,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 21,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 21,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 21,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 21,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 21,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 22,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 22,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 22,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 23,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 23,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 23,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 24,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 24,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 24,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 25,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 25,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 25,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 25,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 26,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 26,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 26,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 26,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 26,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 27,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 27,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 27,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 28,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 28,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 29,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    },
+    {
+      "step": 29,
+      "model": "openai/gpt-oss-20b",
+      "error": "400"
+    },
+    {
+      "step": 30,
+      "model": "openai/gpt-oss-20b",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [],
+  "first_patch_file_step": null,
+  "test_failures": [],
+  "first_failure_drop_step": null,
+  "tests_pass_step": null,
+  "steps_after_tests_pass": null
+}

@@ -1,6 +1,6 @@
 {
-    "default_provider": "gemini",
-    "default_model": "gemini-3.6-flash",
+    "default_provider": "groq",
+    "default_model": "openai/gpt-oss-120b",
     "providers": [
         {
             "name": "groq",
@@ -12,20 +12,24 @@
             "name": "openrouter",
             "url": "https://openrouter.ai/api/v1",
             "api_key_env": "OPENROUTER_API_KEY",
-            "fallback_model": "poolside/laguna-s-2.1:free"
+            "fallback_model": "nvidia/nemotron-3.5-super-vl:free"
         },
         {
             "name": "gemini",
             "url": "https://generativelanguage.googleapis.com/v1beta/openai",
             "api_key_env": "GEMINI_API_KEY",
-            "fallback_model": "gemini-3.6-flash"
+            "fallback_model": "gemini-3.5-flash-lite",
+            "rpm": 5
         }
     ],
     "benchmark_models": [
-        {"provider": "gemini", "model": "gemini-3.6-flash"},
         {"provider": "groq", "model": "openai/gpt-oss-120b"},
-        {"provider": "groq", "model": "openai/gpt-oss-20b"},
         {"provider": "groq", "model": "qwen/qwen3.8-27b"},
-        {"provider": "openrouter", "model": "poolside/laguna-s-2.1:free"}
-    ]
+        {"provider": "openrouter", "model": "nvidia/nemotron-3.5-lightning:free"},
+        {"provider": "openrouter", "model": "dots-studio/dots-3-note-preview:free"},
+        {"provider": "openrouter", "model": "nvidia/nemotron-3.5-super-vl:free"}
+    ],
+    "options_par_modele": {
+        "openai/gpt-oss-120b": {"reasoning_effort": "low"}
+    }
 }

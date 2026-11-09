@@ -20,6 +20,9 @@ class Provider(BaseModel):
     api_key_env: str
     # Modèle utilisé quand l'agent bascule sur ce fournisseur
     fallback_model: str
+    # Requêtes par minute autorisées PAR CLÉ (ex. 5 pour Gemini gratuit). None = pas de rythme imposé.
+    # Avec N clés de comptes différents, le fournisseur accepte jusqu'à N * rpm requêtes par minute.
+    rpm: float | None = None
 
     @property
     def host(self) -> str:
@@ -38,6 +41,14 @@ class ModelsConfig(BaseModel):
     providers: list[Provider]
     # Modèles comparés dans BENCHMARK_REPORT.md (sujet : 5 modèles, 2 fournisseurs minimum)
     benchmark_models: list[BenchmarkModel] = []
+    # Paramètres ajoutés à chaque requête, pour un modèle précis (ex. {"reasoning_effort": "low"}).
+    # Par modèle et pas par fournisseur : chez un même fournisseur, tous les modèles
+    # n'acceptent pas les mêmes paramètres (une valeur inconnue donne une erreur 400).
+    options_par_modele: dict[str, dict] = {}
+
+    def options(self, modele: str) -> dict:
+        """Les paramètres à ajouter aux requêtes de ce modèle ({} s'il n'en a pas)."""
+        return dict(self.options_par_modele.get(modele, {}))
 
     @model_validator(mode="after")
     def verifier(self):

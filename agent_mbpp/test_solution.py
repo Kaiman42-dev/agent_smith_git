@@ -12,7 +12,7 @@ def step(n, code, sortie):
 
 
 def dans_une_chaine(fonction):
-    """le format demandé par PROMPT_MBPP"""
+    """le format demandé par CONSIGNES_MBPP"""
     return (f"code = '''{fonction}'''\n"
             "result = run_tests(code=code, test_list=tests)\nprint(result)\n")
 
@@ -61,3 +61,8 @@ def test_chaine_qui_ne_compile_pas_ignoree():
 
 def test_rien_trouve():
     assert solution_from_answer("Final Answer: 42", [step(1, "print(1)", "1\n")], "multiply_int") == ""
+
+
+def test_final_answer_suivi_d_un_bloc_python():
+    # gpt-oss-20b : "**Final answer**:\n\n```python\n...```"
+    assert solution_from_answer(f"```python\n{BONNE}\n```", [], "multiply_int") == BONNE

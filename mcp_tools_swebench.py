@@ -1,12 +1,9 @@
 import argparse
 import json
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 from outils import code_search_tools, execution_tools, file_systeme_tool
 
-mcp = MCPServer("swebench")
-
-
-# ---- File system tools ----
+mcp = FastMCP("swebench")
 
 @mcp.tool()
 def read_file(filepath: str, start_line: int, end_line: int) -> str:
@@ -108,7 +105,8 @@ def run_tests() -> str:
     """Run the task's evaluation script (eval.sh at the repository root).
 
     Returns:
-        The exit code, stdout and stderr of the script.
+        The test part of the evaluation script's output (between its "Start Test Output"
+        and "End Test Output" markers). If it is too long, only the last 4000 characters are returned.
     """
     return execution_tools.run_tests()
 
@@ -151,7 +149,7 @@ def swebench_limits() -> str:
 
 @mcp.prompt()
 def solve_swebench(problem_statement: str, hints_text: str = "") -> str:
-    """Prompt asking the LLM to fix one SWE-bench issue.
+    """Asks the LLM to fix one SWE-bench bug.
 
     Args:
         problem_statement: the GitHub issue to fix.
@@ -175,6 +173,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     if args.http:
-        mcp.run("streamable-http", host=args.host, port=args.port)
+        mcp.settings.host, mcp.settings.port = args.host, args.port  # mcp 1.x : pas d'argument dans run()
+        mcp.run("streamable-http")
     else:
         mcp.run()

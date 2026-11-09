@@ -5,7 +5,9 @@ import urllib.error
 import urllib.request
 
 from Extraction_llm import extraire_code
-from agent_algo.agent import Agent, ClientLLM, generation_refusee
+import pytest
+
+from agent_algo.agent import Agent, ClientLLM, generation_refusee, reponse_finale
 from agent_algo.test_bascule import FauxClient
 from agent_algo.test_observation import FausseSandbox
 
@@ -171,3 +173,22 @@ def test_le_client_garde_le_texte_refuse(monkeypatch):
     assert (message["content"], code) == (NATIF, None)
     assert client.input_tokens == 100 and client.output_tokens == len(NATIF) // 3  # estimés
     assert client.erreurs == ["400"]  # reste visible dans les métriques
+
+
+# Réponse finale écrite autrement que "Final Answer:" (gpt-oss-20b : "**Final answer**:")
+
+@pytest.mark.parametrize("texte", ["Final Answer: 42", "**Final answer**: 42", "Final answer : 42",
+                                   "FINAL ANSWER:42", "Thought: done.\n**Final Answer:** 42"])
+def test_reponse_finale_variantes(texte):
+    assert reponse_finale(texte) == "42"
+
+
+def test_pas_de_reponse_finale():
+    assert reponse_finale("Thought: the final answer will come later") is None
+    assert reponse_finale("final_answer(x)") is None  # l'appel de fonction n'est pas du texte final
+
+
+def test_l_agent_s_arrete_sur_final_answer_en_gras():
+    client = FauxClient("A", [({"content": "**Final answer**:\n\n42"}, None)])
+    reponse, steps = Agent("question", max_tours=5, client=client, sandbox=None).agent_algo()
+    assert reponse == "42" and len(steps) == 1

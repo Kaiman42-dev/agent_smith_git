@@ -152,9 +152,9 @@ def make_tool_proxy(conn, tool_name: str, description: str | None):
     Le vrai outil tourne dans le parent, hors de la sandbox : il n'est donc soumis
     ni aux restrictions, ni au timeout.
     """
-    def tool_proxy(**kwargs):
+    def tool_proxy(*args,**kwargs):
         # On envoie un ToolCall au parent et on attend sa réponse (ToolReply)
-        send_message(conn, ToolCall(name=tool_name, arguments=kwargs))
+        send_message(conn, ToolCall(name=tool_name, arguments=kwargs, args=list(args)))
         reply = receive_message(conn)
         if reply.error is not None:
             raise RuntimeError(reply.error)

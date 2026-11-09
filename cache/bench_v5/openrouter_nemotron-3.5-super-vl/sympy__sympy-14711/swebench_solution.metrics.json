@@ -1,0 +1,85 @@
+{
+  "task_id": "sympy__sympy-14711",
+  "benchmark": "swebench",
+  "model": "nvidia/nemotron-3.5-super-vl:free",
+  "provider": "openrouter",
+  "models_used": [
+    "nvidia/nemotron-3.5-super-vl:free"
+  ],
+  "success": true,
+  "iterations": 11,
+  "total_input_tokens": 34719,
+  "total_output_tokens": 3599,
+  "input_tokens_per_step": [
+    1848,
+    2056,
+    2374,
+    2577,
+    2655,
+    2772,
+    3103,
+    3271,
+    4053,
+    4905,
+    5105
+  ],
+  "output_tokens_per_step": [
+    2000,
+    695,
+    55,
+    32,
+    60,
+    359,
+    158,
+    28,
+    100,
+    65,
+    47
+  ],
+  "total_time_seconds": 128.25729727745056,
+  "request_time_ms_per_step": [
+    28904.998166999576,
+    14741.550165999797,
+    15555.498958000499,
+    1876.3834579995091,
+    1428.5097920001135,
+    15161.631042000408,
+    4316.609542000151,
+    8018.36779200039,
+    12562.10766699951,
+    2163.721500000065,
+    1523.3378749999247
+  ],
+  "total_requests": 13,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "nvidia/nemotron-3.5-super-vl:free",
+      "error": "429"
+    },
+    {
+      "step": 9,
+      "model": "nvidia/nemotron-3.5-super-vl:free",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [
+    "sympy/physics/vector/vector.py"
+  ],
+  "first_patch_file_step": 2,
+  "test_failures": [
+    {
+      "step": 8,
+      "failures": 0
+    },
+    {
+      "step": 9,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": null,
+  "tests_pass_step": 8,
+  "steps_after_tests_pass": 3
+}

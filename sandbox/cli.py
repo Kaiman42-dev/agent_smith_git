@@ -73,6 +73,21 @@ class SandboxConsole(code.InteractiveConsole):
         super().__init__()
         self.sandbox = sandbox
 
+    def raw_input(self, prompt=""):
+        """Comme input(), mais un bloc encore ouvert à la fin de l'entrée est exécuté.
+
+        Quand le code arrive par un tube (cat test.py | sandbox ...), le fichier peut finir
+        au milieu d'un bloc (if/for...) sans la ligne vide qui le ferme. interact() jetterait
+        alors ce bloc à l'EOF : on renvoie une ligne vide pour le fermer, et le prochain
+        appel relève l'EOF pour quitter normalement.
+        """
+        try:
+            return super().raw_input(prompt)
+        except EOFError:
+            if self.buffer:  # un bloc commencé attend sa ligne vide
+                return ""
+            raise
+
     def runsource(self, source, filename="<stdin>", symbol="single"):
         """Renvoie True tant que le bloc n'est pas fini (la console redemande une ligne)."""
         if source.strip() in EXIT_COMMANDS:

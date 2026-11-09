@@ -5,6 +5,12 @@ import pytest
 
 from outils import code_search_tools, execution_tools, file_systeme_tool, testbed
 
+SORTIE_EVAL = """beaucoup de bruit (git show, pip install...)
+: '>>>>> Start Test Output'
+test_symbols FAILED
+: '>>>>> End Test Output'
+git version 2.42.0
+"""
 
 @pytest.fixture
 def depot(tmp_path, monkeypatch):
@@ -99,3 +105,16 @@ def test_avec_conteneur_tout_passe_par_docker_exec(depot, monkeypatch):
     assert [c[:5] for c, _ in lances] == [["docker", "exec", "-w", "/testbed/pkg", "c1"],
                                          ["docker", "exec", "-w", "/testbed", "c1"]]
     assert all("cwd" not in options for _, options in lances)  # jamais exécuté sur l'hôte
+
+def test_output_tests_sans_marqueurs_renvoie_tout():
+    assert execution_tools.output_tests("pip install a planté") == "pip install a planté"
+
+def test_output_tests_garde_seulement_les_tests():
+    resultat = execution_tools.output_tests(SORTIE_EVAL)
+    assert resultat == "test_symbols FAILED\n"
+
+def test_output_tests_trop_long():
+    resultat = execution_tools.output_tests("x" * 10000 + "RESUME DES TESTS\n")
+    assert resultat.endswith("RESUME DES TESTS\n")
+    assert resultat.startswith("Output too long, showing last 4000 characters:\n")
+

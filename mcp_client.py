@@ -23,7 +23,8 @@ class McpClient:
         self._stack: AsyncExitStack | None = None
 
     def _open_transport(self):
-        # The only transport-specific code: both return a (read, write) pair
+        # The only transport-specific code. stdio gives (read, write); with mcp 1.x streamable
+        # HTTP also gives a third value (get_session_id), which we do not need
         if self.target.startswith(("http://", "https://")):
             return streamable_http_client(self.target)
         command, *args = shlex.split(self.target)
@@ -34,7 +35,7 @@ class McpClient:
         # transport then the session, and closes them in reverse order
         self._stack = AsyncExitStack()
         try:
-            read, write = await self._stack.enter_async_context(self._open_transport())
+            read, write, *_ = await self._stack.enter_async_context(self._open_transport())
             self.session = await self._stack.enter_async_context(ClientSession(read, write))
             await self.session.initialize()
         except BaseException:
@@ -171,8 +172,8 @@ async def main(target: str):
         tools = await client.list_tools()
         for tool in tools:
             print(f"Tool: {tool.name}, description: {tool.description}")
-            print(f"input schema: properties: {tool.input_schema.get('properties', {})}")
-            print(f"input schema: required: {tool.input_schema.get('required', [])}")
+            print(f"input schema: properties: {tool.inputSchema.get('properties', {})}")
+            print(f"input schema: required: {tool.inputSchema.get('required', [])}")
 
         response = await client.call_tool(tools[0].name, test_input)
         print(f"\nresponse: {response}")

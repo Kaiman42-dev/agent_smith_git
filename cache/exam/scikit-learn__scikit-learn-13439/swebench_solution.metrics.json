@@ -1,0 +1,138 @@
+{
+  "task_id": "scikit-learn__scikit-learn-13439",
+  "benchmark": "swebench",
+  "model": "gemini-3.6-flash",
+  "provider": "gemini",
+  "models_used": [
+    "gemini-3.6-flash"
+  ],
+  "success": true,
+  "iterations": 24,
+  "total_input_tokens": 118941,
+  "total_output_tokens": 1199,
+  "input_tokens_per_step": [
+    2253,
+    2305,
+    2372,
+    3674,
+    4324,
+    5226,
+    5694,
+    5388,
+    5030,
+    4429,
+    4288,
+    4508,
+    4922,
+    5080,
+    5202,
+    5127,
+    5112,
+    5188,
+    6495,
+    6578,
+    6647,
+    6853,
+    6050,
+    6196
+  ],
+  "output_tokens_per_step": [
+    39,
+    50,
+    51,
+    67,
+    38,
+    38,
+    42,
+    27,
+    26,
+    25,
+    42,
+    38,
+    87,
+    91,
+    42,
+    116,
+    24,
+    11,
+    11,
+    154,
+    11,
+    42,
+    116,
+    11
+  ],
+  "total_time_seconds": 571.0424132347107,
+  "request_time_ms_per_step": [
+    13084.75350000026,
+    4071.6049160000694,
+    2584.9168749991804,
+    3437.1859590000895,
+    2399.317291999978,
+    3302.8515830001197,
+    12632.951500000672,
+    1532.6167920002263,
+    3384.313167000073,
+    2332.8713339997194,
+    1969.816957999683,
+    7797.884874999909,
+    1960.1927089997844,
+    1464.0904579991911,
+    2221.186083000248,
+    2186.866041999565,
+    17169.02137500074,
+    1426.1000409996996,
+    4345.721624999896,
+    4634.459667000556,
+    3872.102709000501,
+    21559.83104200004,
+    2933.982083999581,
+    13762.342125000032
+  ],
+  "total_requests": 28,
+  "total_retries": 3,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 2,
+      "model": "gemini-3.6-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 7,
+      "model": "gemini-3.6-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 19,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [
+    "sklearn/pipeline.py"
+  ],
+  "first_patch_file_step": 4,
+  "test_failures": [
+    {
+      "step": 3,
+      "failures": 1
+    },
+    {
+      "step": 18,
+      "failures": 0
+    },
+    {
+      "step": 24,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": 18,
+  "tests_pass_step": 18,
+  "steps_after_tests_pass": 6
+}

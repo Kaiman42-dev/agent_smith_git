@@ -1,0 +1,91 @@
+{
+  "task_id": "sympy__sympy-23534",
+  "benchmark": "swebench",
+  "model": "gemini-3.6-flash",
+  "provider": "gemini",
+  "models_used": [
+    "gemini-3.6-flash"
+  ],
+  "success": true,
+  "iterations": 13,
+  "total_input_tokens": 72350,
+  "total_output_tokens": 2125,
+  "input_tokens_per_step": [
+    1769,
+    1821,
+    2158,
+    4159,
+    5589,
+    6027,
+    6749,
+    6918,
+    7056,
+    7173,
+    7498,
+    7688,
+    7745
+  ],
+  "output_tokens_per_step": [
+    0,
+    0,
+    77,
+    40,
+    242,
+    849,
+    711,
+    40,
+    87,
+    11,
+    11,
+    44,
+    13
+  ],
+  "total_time_seconds": 222.50041794776917,
+  "request_time_ms_per_step": [
+    4063.923832999535,
+    2471.642375000556,
+    2019.2761670004984,
+    1869.5733330005169,
+    6245.5998340001315,
+    5526.696040999923,
+    6087.557708000531,
+    2532.1704580001096,
+    1750.2174999999625,
+    1282.8584159997263,
+    6438.8427089998,
+    2866.790332999699,
+    9970.935084000303
+  ],
+  "total_requests": 15,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 12,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [
+    "sympy/core/symbol.py"
+  ],
+  "first_patch_file_step": 3,
+  "test_failures": [
+    {
+      "step": 5,
+      "failures": 1
+    },
+    {
+      "step": 10,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": 10,
+  "tests_pass_step": 10,
+  "steps_after_tests_pass": 3
+}

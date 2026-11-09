@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from agent_algo.agent import ClientLLM, creer_client_cli, creer_clients_secours, url_chat
+from agent_algo.agent import ClientLLM, creer_client_cli, creer_clients_secours, fournisseur_de_depart, url_chat
 from agent_algo.config import ModelsConfig, charger_config
 
 CLES = ("GROQ_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY")
@@ -35,7 +35,8 @@ def cles(monkeypatch):
 def test_le_models_json_du_depot_est_valide():
     conf = charger_config()
     assert [p.name for p in conf.providers] == ["groq", "openrouter", "gemini"]  # ordre de bascule
-    assert conf.fournisseur(conf.default_provider).name == "gemini"
+    # on commence par Groq : Gemini (5 requêtes par minute en gratuit) n'est utilisé qu'en dernier recours
+    assert conf.fournisseur(conf.default_provider).name == "groq"
     assert all(p.api_key_env.endswith("_API_KEY") for p in conf.providers)  # des noms, pas des clés
 
 
@@ -105,3 +106,55 @@ def test_secours_dans_l_ordre_sans_le_principal_ni_les_cles_manquantes(cles):
     principal = ClientLLM("https://a.test/v1/chat/completions", "autre-modele-de-a", "x")
     secours = creer_clients_secours(principal, config())
     assert [(c.adress, c.modele) for c in secours] == [("https://c.test/v1/chat/completions", "modele-c")]
+
+
+# Examen : le correcteur crée ses clés en direct et peut n'en avoir qu'une partie
+def test_depart_sur_le_fournisseur_par_defaut_s_il_a_une_cle(cles):
+    for nom in ("CLE_A", "CLE_B", "CLE_C"):
+        cles.setenv(nom, "x")
+    assert fournisseur_de_depart(config()) == ("https://b.test/v1/", "modele-b")
+
+
+def test_depart_sur_le_premier_fournisseur_qui_a_une_cle(cles):
+    cles.setenv("CLE_C", "x")
+    cles.setenv("CLE_A", "x")  # pas de CLE_B (le défaut) : a passe avant c, dans l'ordre de providers
+    assert fournisseur_de_depart(config()) == ("https://a.test/v1", "modele-a")
+
+
+def test_depart_avec_le_modele_de_secours_du_fournisseur(cles):
+    cles.setenv("CLE_C", "x")
+    assert fournisseur_de_depart(config()) == ("https://c.test/v1", "modele-c")
+
+
+def test_depart_sans_aucune_cle(cles):
+    with pytest.raises(ValueError, match="CLE_A"):  # le message cite les variables à définir
+        fournisseur_de_depart(config())
+
+
+# options_par_modele : paramètres ajoutés aux requêtes d'un modèle précis (ex. reasoning_effort)
+def test_options_seulement_pour_le_modele_configure(cles):
+    cles.setenv("CLE_B", "x")
+    conf = config(options_par_modele={"modele-b": {"reasoning_effort": "low"}})
+    assert creer_client_cli("https://b.test/v1", "modele-b", None, conf).options == {"reasoning_effort": "low"}
+    assert creer_client_cli("https://b.test/v1", "autre-modele", None, conf).options == {}  # même fournisseur
+
+
+def test_options_vides_par_defaut():
+    assert config().options("modele-a") == {}
+
+
+def test_les_options_partent_dans_la_requete_sans_ecraser_l_essentiel(monkeypatch):
+    import io
+    import urllib.request
+    envoye = {}
+
+    def faux_urlopen(requete, timeout=None):
+        envoye.update(json.loads(requete.data))
+        return io.BytesIO(b'{"choices": [{"message": {"content": "ok"}}], "usage": {}}')
+
+    monkeypatch.setattr(urllib.request, "urlopen", faux_urlopen)
+    client = ClientLLM("https://b.test/v1/chat/completions", "modele-b", "x",
+                       options={"reasoning_effort": "low", "model": "pirate"})
+    client.appel_llm([{"role": "user", "content": "q"}], max_tokens=50)
+    assert envoye["reasoning_effort"] == "low"
+    assert envoye["model"] == "modele-b" and envoye["max_tokens"] == 50  # l'essentiel reste prioritaire

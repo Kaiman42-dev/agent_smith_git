@@ -1,0 +1,94 @@
+{
+  "task_id": "sympy__sympy-14711",
+  "benchmark": "swebench",
+  "model": "gemma-4-26b-a4b-it",
+  "provider": "gemini",
+  "models_used": [
+    "gemma-4-26b-a4b-it"
+  ],
+  "success": false,
+  "iterations": 1,
+  "total_input_tokens": 2030,
+  "total_output_tokens": 140,
+  "input_tokens_per_step": [
+    2030
+  ],
+  "output_tokens_per_step": [
+    140
+  ],
+  "total_time_seconds": 323.6053011417389,
+  "request_time_ms_per_step": [
+    4284.70974999982
+  ],
+  "total_requests": 12,
+  "total_retries": 5,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "timeout"
+    },
+    {
+      "step": 1,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "timeout"
+    },
+    {
+      "step": 1,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "timeout"
+    },
+    {
+      "step": 1,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "500"
+    },
+    {
+      "step": 1,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "timeout"
+    },
+    {
+      "step": 2,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "500"
+    },
+    {
+      "step": 2,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "500"
+    },
+    {
+      "step": 2,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "timeout"
+    },
+    {
+      "step": 2,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "500"
+    },
+    {
+      "step": 2,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "500"
+    },
+    {
+      "step": 2,
+      "model": "gemma-4-26b-a4b-it",
+      "error": "timeout"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [],
+  "first_patch_file_step": null,
+  "test_failures": [
+    {
+      "step": 1,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": null,
+  "tests_pass_step": 1,
+  "steps_after_tests_pass": null
+}

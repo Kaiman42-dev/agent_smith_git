@@ -9,7 +9,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv # type: ignore
 
-from agent_algo.agent import Agent, creer_client_cli, creer_clients_secours
+from Extraction_llm import p_mardown
+from agent_algo.agent import Agent, creer_client_cli, creer_clients_secours, fournisseur_de_depart
 from agent_algo.config import charger_config
 from agent_algo.metriques import ecrire_metriques, metriques_du_run
 from mcp_bridge import build_manual, build_tools
@@ -31,7 +32,7 @@ MBPP_SERVER = Path(__file__).resolve().parent.parent / "mcp_tools_mbpp.py"
 MBPP_SERVER_COMMAND = f"{shlex.quote(sys.executable)} {shlex.quote(str(MBPP_SERVER))}"
 
 # prompt en anglais et court : la limite MBPP est de 6000 tokens d'entree sur TOUS les tours
-PROMPT_MBPP = """You solve Python tasks.
+CONSIGNES_MBPP = """You solve Python tasks.
 Each turn: "Thought:" in ONE sentence, then ONE ```python block like this:
     code = '''def f(x):
         ...'''
@@ -92,8 +93,10 @@ def extraire_solution(steps, nom_fonction: str) -> str:
 
 
 def solution_from_answer(answer: str, steps, function_name: str) -> str:
-    """final_answer(code) gives the solution directly; otherwise search the steps."""
-    return code_de_la_fonction(answer, function_name) or extraire_solution(steps, function_name)
+    """final_answer(code) gives the solution directly; otherwise search the steps.
+    "Final Answer:" may also be followed by a ```python block."""
+    return (code_de_la_fonction(p_mardown(answer) or answer, function_name)
+            or extraire_solution(steps, function_name))
 
 
 def main():
@@ -117,8 +120,12 @@ def main():
 
     try:
         config = charger_config()
-        provider_url = args.provider_url or config.fournisseur(config.default_provider).url
-        client = creer_client_cli(provider_url, args.model_name or config.default_model, args.api_key_env, config)
+        if args.provider_url is None and args.model_name is None and args.api_key_env is None:
+            provider_url, modele = fournisseur_de_depart(config)  # examen : le premier fournisseur qui a une clé
+        else:
+            provider_url = args.provider_url or config.fournisseur(config.default_provider).url
+            modele = args.model_name or config.default_model
+        client = creer_client_cli(provider_url, modele, args.api_key_env, config)
     except ValueError as e:
         sys.exit(f"Erreur de configuration : {e}")
     secours = [] if args.no_fallback else creer_clients_secours(client, config)
@@ -126,7 +133,7 @@ def main():
     erreur = None
     agent = None
     reponse, steps, agent_succes = "", [], False
-    system_prompt = PROMPT_MBPP
+    system_prompt = CONSIGNES_MBPP
     try:
         # The MBPP MCP server provides run_tests. One sandbox process for the
         # whole task, so variables persist between steps
@@ -135,7 +142,7 @@ def main():
                 # `tests` lets the LLM call run_tests without copying the asserts
                 sandbox.execute(f"tests = {tache.test_imports + tache.test_list!r}")
                 agent = Agent(question=construire_question(tache), max_tours=MAX_TOURS, client=client,
-                              sandbox=sandbox, prompt_systeme=PROMPT_MBPP,
+                              sandbox=sandbox, prompt_systeme=CONSIGNES_MBPP,
                               tools_manual=build_manual(mcp_client.list_tools()), secours=secours,
                               max_input_tokens=MAX_INPUT_TOKENS, max_output_tokens=MAX_OUTPUT_TOKENS,
                               fin=fin)

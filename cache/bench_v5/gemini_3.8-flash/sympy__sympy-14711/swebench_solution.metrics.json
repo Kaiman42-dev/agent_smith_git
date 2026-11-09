@@ -1,0 +1,56 @@
+{
+  "task_id": "sympy__sympy-14711",
+  "benchmark": "swebench",
+  "model": "gemini-3.8-flash",
+  "provider": "gemini",
+  "models_used": [],
+  "success": false,
+  "iterations": 0,
+  "total_input_tokens": 0,
+  "total_output_tokens": 0,
+  "input_tokens_per_step": [],
+  "output_tokens_per_step": [],
+  "total_time_seconds": 275.4448959827423,
+  "request_time_ms_per_step": [],
+  "total_requests": 6,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "gemini-3.8-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.8-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.8-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.8-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.8-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.8-flash",
+      "error": "timeout"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [],
+  "first_patch_file_step": null,
+  "test_failures": [],
+  "first_failure_drop_step": null,
+  "tests_pass_step": null,
+  "steps_after_tests_pass": null
+}

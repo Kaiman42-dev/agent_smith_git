@@ -13,7 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv # type: ignore
 
-from agent_algo.agent import Agent, creer_client_cli, creer_clients_secours
+from agent_algo.agent import Agent, creer_client_cli, creer_clients_secours, fournisseur_de_depart
 from agent_algo.config import charger_config
 from agent_algo.metriques import ecrire_metriques, metriques_du_run
 from mcp_bridge import build_manual, build_tools
@@ -30,24 +30,39 @@ TIMEOUT = 900
 # (jusqu'à 300 s, l'outil n'est pas soumis au timeout de la sandbox), puis il faut
 # supprimer le conteneur et écrire solution.json
 MARGE = 330
+# À partir de ce nombre de tours restants, chaque observation demande au LLM de conclure
+ALERTE_BUDGET = 5
+# Seules les N dernières observations restent entières : sur sympy-14711, toutes les lectures
+# de fichiers gardées en entier menaient à 295k tokens d'entrée sur 300k
+OBSERVATIONS_COMPLETES = 4
+# Tokens de sortie au plus par tour : sinon un LLM qui invente toute la suite de la conversation
+# (code, Observation:, code...) peut vider MAX_OUTPUT_TOKENS en un seul appel (9567 tokens au
+# tour 2 de sympy-14711). Les tours normaux n'ont jamais dépassé 600
+MAX_TOKENS_PAR_TOUR = 2000
 
 # Our SWE-bench MCP server
 SWEBENCH_SERVER = Path(__file__).resolve().parent.parent / "mcp_tools_swebench.py"
 SWEBENCH_SERVER_COMMAND = f"{shlex.quote(sys.executable)} {shlex.quote(str(SWEBENCH_SERVER))}"
 
-PROMPT_SWEBENCH = """You are an expert software engineer resolving a bug in a codebase located at `/testbed`.
+# Les images SWE-bench n'existent qu'en x86_64 : sans --platform, un Mac arm64 échoue
+# ("no matching manifest for linux/arm64/v8"). Sans effet sur une machine x86.
+DOCKER_PLATFORM = ["--platform", "linux/amd64"]
+
+CONSIGNES_SWEBENCH = """You are an expert software engineer resolving a bug in a codebase located at `/testbed`.
 Your goal is to locate the bug, fix it minimally, verify the fix, and submit the patch.
 
 CRITICAL RULES:
 - NEVER modify the test files. Only edit the source code to fix the bug.
 - Be concise in your reasoning to save tokens (you have a strict global limit).
+- Each Observation ends with your remaining step budget. Once you know the cause of the bug, fix it right away: do not keep exploring.
+- Only the last 4 Observations are kept in full, older ones are shortened.
+- Never read the same lines twice. Read a whole function at once (around 60 lines), not small pieces.
 
 METHODOLOGY:
-1. Search the codebase to locate the faulty code.
-2. Run `run_tests()` to reproduce the bug and observe the failing tests.
-3. Make a minimal fix using `edit_file()`.
-4. Run `run_tests()` again to ensure the tests pass.
-5. Submit your solution by calling `final_answer(get_patch())`.
+1. Run `run_tests()` to reproduce the bug. If the issue or the tests show a traceback, the last frame in the source code (not in the tests) is usually where the fix goes: read that function first.
+2. Otherwise, use `search_code()` or `search_function_or_class_definition_in_code()` to find the faulty code, instead of reading files from the top.
+3. As soon as you have a hypothesis, make a minimal fix using `edit_file()` and run `run_tests()`: the test output tells you if you were right. A wrong fix costs one step, more exploring costs many.
+4. When the tests pass, submit right away by calling `final_answer(get_patch())`.
 
 FORMAT EXPECTED:
 Each turn, you must provide a "Thought:" explaining your reasoning, followed by ONE ```python block of code to execute.
@@ -56,8 +71,37 @@ Each turn, you must provide a "Thought:" explaining your reasoning, followed by 
 
 Thought: I need to find where the email validation logic is defined to fix the "@" symbol bug.
 ```python
-result = search_code("def validate_email", "*.py")
-print(result)"""
+print(search_code(pattern="def validate_email", file_pattern="*.py"))
+```
+Observation:
+/testbed/app/validators.py:12 def validate_email(email):
+
+Thought: I read this function.
+```python
+print(read_file(filepath="/testbed/app/validators.py", start_line=12, end_line=14))
+```
+Observation:
+12: def validate_email(email):
+13:     return email.count("@") == 2
+
+Thought: An email has exactly one "@", not two. I fix it, then run the tests.
+```python
+print(edit_file(filepath="/testbed/app/validators.py", old_str='count("@") == 2', new_str='count("@") == 1'))
+print(run_tests())
+```
+Observation:
+File updated successfully.
+Tests outputs: test_validate_email ... ok
+
+Thought: The tests pass, I submit the patch.
+```python
+final_answer(get_patch())
+```
+
+--- END OF EXAMPLE ---
+
+The Observation is written by the system after running your code: never write it yourself.
+Always print() what you want to see. Variables are kept from one turn to the next."""
 
 CONTAINER_NAME = f"swebench_agent_{uuid.uuid4().hex[:8]}"
 DEPOT: Path | None = None  # copie de /testbed sur l'hôte, montée dans le conteneur (voir preparer_depot)
@@ -72,7 +116,8 @@ def preparer_depot(image_name: str, eval_script: str) -> Path:
     """
     dossier = Path(tempfile.mkdtemp(prefix="swebench_testbed_"))
     copie = f"{CONTAINER_NAME}_copie"
-    subprocess.run(["docker", "create", "--name", copie, image_name], check=True, capture_output=True)
+    subprocess.run(["docker", "create", *DOCKER_PLATFORM, "--name", copie, image_name],
+                   check=True, capture_output=True)
     try:
         subprocess.run(["docker", "cp", f"{copie}:/testbed/.", str(dossier)], check=True, capture_output=True)
     finally:
@@ -93,12 +138,13 @@ def cleanup_container(signum=None, frame=None):
     if DEPOT is not None:
         shutil.rmtree(DEPOT, ignore_errors=True)
     if signum is not None:
-        print(f"[*] Agent stoppé brutalement (Signal {signum}). Timeout de 900s atteint[cite: 27, 28].")
+        print(f"[*] Agent stoppé brutalement (Signal {signum}). Timeout de 900s atteint.")
         sys.exit(1)
 
 def main():
+    global DEPOT  # rempli par preparer_depot, lu par cleanup_container
     fin = time.monotonic() + TIMEOUT - MARGE  # tout au début : le chrono de la moulinette tourne déjà
-    # Gestion du SIGTERM envoyé par la moulinette[cite: 28]
+    # Gestion du SIGTERM envoyé par la moulinette
     signal.signal(signal.SIGTERM, cleanup_container)
     signal.signal(signal.SIGINT, cleanup_container)
 
@@ -121,8 +167,12 @@ def main():
 
     try:
         config = charger_config()
-        provider_url = args.provider_url or config.fournisseur(config.default_provider).url
-        client = creer_client_cli(provider_url, args.model_name or config.default_model, args.api_key_env, config)
+        if args.provider_url is None and args.model_name is None and args.api_key_env is None:
+            provider_url, modele = fournisseur_de_depart(config)  # examen : le premier fournisseur qui a une clé
+        else:
+            provider_url = args.provider_url or config.fournisseur(config.default_provider).url
+            modele = args.model_name or config.default_model
+        client = creer_client_cli(provider_url, modele, args.api_key_env, config)
     except ValueError as e:
         sys.exit(f"Erreur de configuration : {e}")
     secours = [] if args.no_fallback else creer_clients_secours(client, config)
@@ -130,30 +180,30 @@ def main():
     erreur = None
     agent = None
     reponse, steps, agent_succes = "", [], False
-    system_prompt = PROMPT_SWEBENCH
+    system_prompt = CONSIGNES_SWEBENCH
     patch = ""
 
-    # docker
-    image_name = tache.docker_image
-    check_img = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
-    if not check_img.stdout.strip():
-        print(f"[*] Image {image_name} absente. Téléchargement en cours...[cite: 20]")
-        subprocess.run(["docker", "pull", image_name], check=True)
-
-    global DEPOT
-    DEPOT = preparer_depot(image_name, tache.eval_script)
-    print(f"[*] Lancement du conteneur {CONTAINER_NAME} (dépôt monté depuis {DEPOT})...")
-    subprocess.run(["docker", "run", "-d", "--name", CONTAINER_NAME, "-v", f"{DEPOT}:/testbed",
-                    image_name, "tail", "-f", "/dev/null"], check=True)
-    # les fichiers montés n'ont pas le propriétaire attendu par git ("dubious ownership")
-    subprocess.run(["docker", "exec", CONTAINER_NAME, "git", "config", "--global", "--add",
-                    "safe.directory", "/testbed"], check=True)
-
-    # lues par les outils MCP (outils/testbed.py) : commandes dans ce conteneur, fichiers dans DEPOT
-    os.environ["CONTAINER_NAME"] = CONTAINER_NAME
-    os.environ["TESTBED_PATH"] = str(DEPOT)
-
     try:
+        # docker : dans le try, pour qu'un échec (image introuvable, Docker arrêté...) soit noté
+        # dans solution.json et que le finally nettoie le conteneur et DEPOT
+        image_name = tache.docker_image
+        check_img = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
+        if not check_img.stdout.strip():
+            print(f"[*] Image {image_name} absente. Téléchargement en cours...")
+            subprocess.run(["docker", "pull", *DOCKER_PLATFORM, image_name], check=True)
+
+        DEPOT = preparer_depot(image_name, tache.eval_script)
+        print(f"[*] Lancement du conteneur {CONTAINER_NAME} (dépôt monté depuis {DEPOT})...")
+        subprocess.run(["docker", "run", "-d", *DOCKER_PLATFORM, "--name", CONTAINER_NAME, "-v", f"{DEPOT}:/testbed",
+                        image_name, "tail", "-f", "/dev/null"], check=True)
+        # les fichiers montés n'ont pas le propriétaire attendu par git ("dubious ownership")
+        subprocess.run(["docker", "exec", CONTAINER_NAME, "git", "config", "--global", "--add",
+                        "safe.directory", "/testbed"], check=True)
+
+        # lues par les outils MCP (outils/testbed.py) : commandes dans ce conteneur, fichiers dans DEPOT
+        os.environ["CONTAINER_NAME"] = CONTAINER_NAME
+        os.environ["TESTBED_PATH"] = str(DEPOT)
+
         with SyncMcpClient(SWEBENCH_SERVER_COMMAND) as mcp_client:
             with Sandbox(tools=build_tools(mcp_client)) as sandbox:
                 
@@ -162,10 +212,12 @@ def main():
                     question += f"Hints:\n{tache.hints_text}\n"
 
                 agent = Agent(question=question, max_tours=MAX_TOURS, client=client,
-                              sandbox=sandbox, prompt_systeme=PROMPT_SWEBENCH,
+                              sandbox=sandbox, prompt_systeme=CONSIGNES_SWEBENCH,
                               tools_manual=build_manual(mcp_client.list_tools()), secours=secours,
                               max_input_tokens=MAX_INPUT_TOKENS, max_output_tokens=MAX_OUTPUT_TOKENS,
-                              fin=fin)
+                              fin=fin, alerte_budget=ALERTE_BUDGET,
+                              observations_completes=OBSERVATIONS_COMPLETES,
+                              max_tokens_par_tour=MAX_TOKENS_PAR_TOUR)
                 
                 system_prompt = agent.prompt_systeme
                 reponse, steps = agent.agent_algo()

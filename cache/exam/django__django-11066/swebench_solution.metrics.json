@@ -1,0 +1,56 @@
+{
+  "task_id": "django__django-11066",
+  "benchmark": "swebench",
+  "model": "gemini-3.6-flash",
+  "provider": "gemini",
+  "models_used": [
+    "gemini-3.6-flash"
+  ],
+  "success": true,
+  "iterations": 8,
+  "total_input_tokens": 32735,
+  "total_output_tokens": 379,
+  "input_tokens_per_step": [
+    2574,
+    2626,
+    2802,
+    3862,
+    4570,
+    4675,
+    5690,
+    5936
+  ],
+  "output_tokens_per_step": [
+    0,
+    0,
+    29,
+    103,
+    144,
+    11,
+    11,
+    81
+  ],
+  "total_time_seconds": 279.81867504119873,
+  "request_time_ms_per_step": [
+    2578.9820840000175,
+    6753.163708999637,
+    4418.46058399824,
+    3197.4293749990466,
+    4304.334374999598,
+    11152.12800000154,
+    2313.846958000795,
+    3644.8617079986434
+  ],
+  "total_requests": 8,
+  "total_retries": 0,
+  "provider_errors": [],
+  "fallbacks": [],
+  "patch_files": [
+    "django/contrib/contenttypes/management/__init__.py"
+  ],
+  "first_patch_file_step": 4,
+  "test_failures": [],
+  "first_failure_drop_step": null,
+  "tests_pass_step": null,
+  "steps_after_tests_pass": null
+}

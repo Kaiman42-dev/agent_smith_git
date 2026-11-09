@@ -1,0 +1,176 @@
+{
+  "task_id": "sympy__sympy-14711",
+  "benchmark": "swebench",
+  "model": "gemini-3.6-flash",
+  "provider": "gemini",
+  "models_used": [
+    "cohere/north-mini-code:free",
+    "gemini-3.6-flash"
+  ],
+  "success": false,
+  "iterations": 12,
+  "total_input_tokens": 93913,
+  "total_output_tokens": 10000,
+  "input_tokens_per_step": [
+    2030,
+    4475,
+    6245,
+    8549,
+    10351,
+    9711,
+    9532,
+    8950,
+    9279,
+    9500,
+    7587,
+    7704
+  ],
+  "output_tokens_per_step": [
+    2747,
+    2281,
+    1510,
+    2050,
+    58,
+    130,
+    411,
+    386,
+    117,
+    132,
+    176,
+    2
+  ],
+  "total_time_seconds": 323.0542631149292,
+  "request_time_ms_per_step": [
+    26422.55225000008,
+    16461.06595800029,
+    21344.372832999397,
+    14897.01554199928,
+    5834.987125001135,
+    3125.635083000816,
+    4620.105625001088,
+    5630.455083000925,
+    9523.045291000017,
+    9614.407707998907,
+    1944.0531669988559,
+    807.2173330001533
+  ],
+  "total_requests": 30,
+  "total_retries": 5,
+  "provider_errors": [
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "503"
+    },
+    {
+      "step": 1,
+      "model": "gemini-3.6-flash",
+      "error": "timeout"
+    },
+    {
+      "step": 2,
+      "model": "gemini-3.6-flash",
+      "error": "503"
+    },
+    {
+      "step": 2,
+      "model": "gemini-3.6-flash",
+      "error": "503"
+    },
+    {
+      "step": 4,
+      "model": "gemini-3.6-flash",
+      "error": "503"
+    },
+    {
+      "step": 11,
+      "model": "gemini-3.6-flash",
+      "error": "429"
+    },
+    {
+      "step": 11,
+      "model": "gemini-3.6-flash",
+      "error": "403"
+    },
+    {
+      "step": 11,
+      "model": "gemini-3.6-flash",
+      "error": "403"
+    },
+    {
+      "step": 11,
+      "model": "gemini-3.6-flash",
+      "error": "403"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-120b",
+      "error": "413"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-120b",
+      "error": "413"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-120b",
+      "error": "413"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-120b",
+      "error": "413"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-120b",
+      "error": "413"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-120b",
+      "error": "413"
+    }
+  ],
+  "fallbacks": [
+    {
+      "step": 11,
+      "from": "gemini-3.6-flash",
+      "to": "openai/gpt-oss-120b",
+      "code": 403
+    },
+    {
+      "step": 11,
+      "from": "openai/gpt-oss-120b",
+      "to": "cohere/north-mini-code:free",
+      "code": null
+    }
+  ],
+  "patch_files": [],
+  "first_patch_file_step": null,
+  "test_failures": [
+    {
+      "step": 1,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": null,
+  "tests_pass_step": 1,
+  "steps_after_tests_pass": null
+}
