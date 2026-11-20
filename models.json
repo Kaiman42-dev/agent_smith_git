@@ -1,12 +1,12 @@
 {
     "default_provider": "groq",
-    "default_model": "openai/gpt-oss-120b",
+    "default_model": "qwen/qwen3.8-27b",
     "providers": [
         {
             "name": "groq",
             "url": "https://api.groq.com/openai/v1",
             "api_key_env": "GROQ_API_KEY",
-            "fallback_model": "openai/gpt-oss-120b"
+            "fallback_model": "qwen/qwen3.8-27b"
         },
         {
             "name": "openrouter",

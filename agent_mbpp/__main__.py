@@ -119,7 +119,7 @@ def main():
         tache = MBPPTaskInput.model_validate(json.load(f))
 
     try:
-        config = charger_config()
+        config = charger_config() 
         if args.provider_url is None and args.model_name is None and args.api_key_env is None:
             provider_url, modele = fournisseur_de_depart(config)  # examen : le premier fournisseur qui a une clé
         else:

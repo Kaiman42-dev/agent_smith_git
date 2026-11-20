@@ -1,14 +1,15 @@
 import argparse
 import json
 import os
-import shlex
+import shlex # sert à passer le chemin de l'image Docker à docker run
 import sys
 import time
-import subprocess
-import shutil
-import signal
-import tempfile
-import uuid
+import subprocess # sert à lancer docker run et docker exec
+import shutil # sert à supprimer le dossier temporaire DEPOT
+import signal # sert à intercepter SIGTERM et SIGINT pour supprimer le conteneur et DEPOT
+import tempfile # sert à créer un dossier temporaire pour DEPOT
+import threading # sert à surveiller la mort du processus parent (voir surveiller_parent)
+import uuid # sert à générer un nom unique pour le conteneur
 from pathlib import Path
 
 from dotenv import load_dotenv # type: ignore
@@ -105,6 +106,33 @@ Always print() what you want to see. Variables are kept from one turn to the nex
 
 CONTAINER_NAME = f"swebench_agent_{uuid.uuid4().hex[:8]}"
 DEPOT: Path | None = None  # copie de /testbed sur l'hôte, montée dans le conteneur (voir preparer_depot)
+# Le client `docker run -i` du conteneur : on garde l'objet, sinon son stdin serait fermé (et le
+# conteneur arrêté) dès que Python le libère
+CONTENEUR: subprocess.Popen | None = None
+
+
+def lancer_conteneur(image_name: str) -> subprocess.Popen:
+    """Démarre le conteneur de la tâche et le lie à la vie de ce processus.
+
+    Le conteneur ne fait que lire son stdin (`cat`), qui est un pipe tenu par l'agent. Si l'agent
+    meurt, même par kill -9 (que ne voit aucun handler de signal), le système ferme le pipe :
+    `cat` reçoit EOF, le conteneur s'arrête et `--rm` le supprime. Aucun conteneur orphelin.
+    """
+    proc = subprocess.Popen(["docker", "run", "--rm", "-i", *DOCKER_PLATFORM, "--name", CONTAINER_NAME,
+                             "-v", f"{DEPOT}:/testbed", image_name, "sh", "-c", "cat > /dev/null"],
+                            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    # sans -d, docker run ne rend pas la main : on attend que le conteneur tourne vraiment
+    limite = time.monotonic() + 60
+    while time.monotonic() < limite:
+        if proc.poll() is not None:  # docker run a échoué (image, montage...)
+            raise RuntimeError(f"le conteneur n'a pas démarré : {proc.stderr.read().decode().strip()}")
+        etat = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", CONTAINER_NAME],
+                              capture_output=True, text=True)
+        if etat.stdout.strip() == "true":
+            return proc
+        time.sleep(0.2)
+    proc.kill()
+    raise RuntimeError("le conteneur n'a pas démarré en 60 s")
 
 
 def preparer_depot(image_name: str, eval_script: str) -> Path:
@@ -114,12 +142,12 @@ def preparer_depot(image_name: str, eval_script: str) -> Path:
     l'hôte, confinés à TESTBED_PATH) et les commandes (dans le conteneur) voient les
     mêmes fichiers, comme pendant les tests isolés de la moulinette.
     """
-    dossier = Path(tempfile.mkdtemp(prefix="swebench_testbed_"))
-    copie = f"{CONTAINER_NAME}_copie"
+    dossier = Path(tempfile.mkdtemp(prefix="swebench_testbed_")) # créé un dossier temporaire sur l'hôte pour y copier /testbed de l'image
+    copie = f"{CONTAINER_NAME}_copie" # nom temporaire pour le conteneur qui va copier /testbed de l'image
     subprocess.run(["docker", "create", *DOCKER_PLATFORM, "--name", copie, image_name],
-                   check=True, capture_output=True)
+                   check=True, capture_output=True) # crée un conteneur temporaire pour copier /testbed de l'image
     try:
-        subprocess.run(["docker", "cp", f"{copie}:/testbed/.", str(dossier)], check=True, capture_output=True)
+        subprocess.run(["docker", "cp", f"{copie}:/testbed/.", str(dossier)], check=True, capture_output=True) # copie /testbed du conteneur temporaire vers le dossier temporaire sur l'hôte
     finally:
         subprocess.run(["docker", "rm", "-f", copie], capture_output=True)
     # run_tests() lance eval.sh à la racine du dépôt ; il ne doit jamais finir dans le patch
@@ -135,18 +163,63 @@ def cleanup_container(signum=None, frame=None):
     """Toujours supprimer le conteneur, même en cas de timeout de la moulinette."""
     print(f"\n[*] Nettoyage : Suppression du conteneur {CONTAINER_NAME}...")
     subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
+    if CONTENEUR is not None:
+        CONTENEUR.kill()  # le client docker run, déjà sans conteneur
     if DEPOT is not None:
         shutil.rmtree(DEPOT, ignore_errors=True)
     if signum is not None:
         print(f"[*] Agent stoppé brutalement (Signal {signum}). Timeout de 900s atteint.")
         sys.exit(1)
 
+def patch_actuel() -> str:
+    """Le git diff réel du dépôt dans le conteneur ("" si rien n'a été modifié)."""
+    diff_cmd = ["docker", "exec", "-w", "/testbed", CONTAINER_NAME, "git", "-c", "core.fileMode=false", "diff"]
+    return subprocess.run(diff_cmd, capture_output=True, text=True).stdout
+
+
+# Envoyé quand le LLM conclut alors que le dépôt n'a aucune modification
+PATCH_VIDE = ("Your final answer was refused: the repository has no changes, so the patch is empty "
+              "(get_patch() says 'No changes found.'). Saying the bug is fixed does not fix it. "
+              "Edit the source code with edit_file(), run run_tests(), then call "
+              "final_answer(get_patch()) again.")
+
+
+def refuser_patch_vide(reponse: str) -> str | None:
+    """Pour Agent(valider_reponse=...) : on regarde le dépôt, pas le texte de la réponse.
+
+    get_patch() renvoie "No changes found." quand rien n'a changé : ce texte n'est pas vide, donc
+    seul le vrai git diff dit si le LLM a modifié quelque chose (examen du 20/11 : 2 tâches
+    perdues sur un patch vide soumis par gpt-oss-120b).
+    """
+    return None if patch_actuel().strip() else PATCH_VIDE
+
+
+def surveiller_parent():
+    """Nettoie et quitte si le processus parent meurt (par exemple `uv run` tué par kill -9).
+
+    SIGKILL ne se propage pas aux enfants : sans cette surveillance, l'agent continuerait seul,
+    rattaché à init, avec son conteneur en marche. Quand le parent meurt, getppid() change.
+    """
+    parent = os.getppid()
+
+    def boucle():
+        while True:
+            time.sleep(1)
+            if os.getppid() != parent:
+                print(f"[*] Processus parent {parent} disparu : arrêt de l'agent.", flush=True)
+                cleanup_container()
+                os._exit(1)  # sys.exit() ne terminerait que ce thread
+
+    threading.Thread(target=boucle, daemon=True).start()
+
+
 def main():
-    global DEPOT  # rempli par preparer_depot, lu par cleanup_container
+    global DEPOT, CONTENEUR  # remplis par preparer_depot et lancer_conteneur, lus par cleanup_container
     fin = time.monotonic() + TIMEOUT - MARGE  # tout au début : le chrono de la moulinette tourne déjà
     # Gestion du SIGTERM envoyé par la moulinette
-    signal.signal(signal.SIGTERM, cleanup_container)
-    signal.signal(signal.SIGINT, cleanup_container)
+    signal.signal(signal.SIGTERM, cleanup_container) # pour le timeout de 900s, idem que SIGINT
+    signal.signal(signal.SIGINT, cleanup_container) # pour Ctrl-C en local, idem que SIGTERM
+    surveiller_parent() # pour kill -9 sur `uv run` : l'agent ne lui survit pas
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--task-file", required=True)
@@ -194,8 +267,7 @@ def main():
 
         DEPOT = preparer_depot(image_name, tache.eval_script)
         print(f"[*] Lancement du conteneur {CONTAINER_NAME} (dépôt monté depuis {DEPOT})...")
-        subprocess.run(["docker", "run", "-d", *DOCKER_PLATFORM, "--name", CONTAINER_NAME, "-v", f"{DEPOT}:/testbed",
-                        image_name, "tail", "-f", "/dev/null"], check=True)
+        CONTENEUR = lancer_conteneur(image_name)
         # les fichiers montés n'ont pas le propriétaire attendu par git ("dubious ownership")
         subprocess.run(["docker", "exec", CONTAINER_NAME, "git", "config", "--global", "--add",
                         "safe.directory", "/testbed"], check=True)
@@ -217,7 +289,8 @@ def main():
                               max_input_tokens=MAX_INPUT_TOKENS, max_output_tokens=MAX_OUTPUT_TOKENS,
                               fin=fin, alerte_budget=ALERTE_BUDGET,
                               observations_completes=OBSERVATIONS_COMPLETES,
-                              max_tokens_par_tour=MAX_TOKENS_PAR_TOUR)
+                              max_tokens_par_tour=MAX_TOKENS_PAR_TOUR,
+                              valider_reponse=refuser_patch_vide)
                 
                 system_prompt = agent.prompt_systeme
                 reponse, steps = agent.agent_algo()
@@ -227,9 +300,7 @@ def main():
         if agent_succes and reponse and "diff --git" in reponse:
             patch = reponse
         else:
-            diff_cmd = ["docker", "exec", "-w", "/testbed", CONTAINER_NAME, "git", "-c", "core.fileMode=false", "diff"]
-            diff_res = subprocess.run(diff_cmd, capture_output=True, text=True)
-            patch = diff_res.stdout
+            patch = patch_actuel()
             if patch.strip():
                 agent_succes = True
 

@@ -1,0 +1,92 @@
+{
+  "task_id": "scikit-learn__scikit-learn-13439",
+  "benchmark": "swebench",
+  "model": "qwen/qwen3.8-27b",
+  "provider": "groq",
+  "models_used": [
+    "qwen/qwen3.8-27b"
+  ],
+  "success": true,
+  "iterations": 8,
+  "total_input_tokens": 26134,
+  "total_output_tokens": 363,
+  "input_tokens_per_step": [
+    2072,
+    2147,
+    2243,
+    3179,
+    3625,
+    3778,
+    4776,
+    4314
+  ],
+  "output_tokens_per_step": [
+    34,
+    38,
+    48,
+    63,
+    112,
+    26,
+    20,
+    22
+  ],
+  "total_time_seconds": 17.084705114364624,
+  "request_time_ms_per_step": [
+    433.8667920019361,
+    1046.8221250011993,
+    666.1635829987063,
+    554.4315830011328,
+    681.0948329984967,
+    515.3344999998808,
+    712.7537500018661,
+    687.4857500006328
+  ],
+  "total_requests": 14,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 4,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 6,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 7,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 8,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 8,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 8,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [
+    "sklearn/pipeline.py"
+  ],
+  "first_patch_file_step": 2,
+  "test_failures": [
+    {
+      "step": 6,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": null,
+  "tests_pass_step": 6,
+  "steps_after_tests_pass": 2
+}

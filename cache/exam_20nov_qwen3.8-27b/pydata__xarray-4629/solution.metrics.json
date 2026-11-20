@@ -1,0 +1,64 @@
+{
+  "task_id": "pydata__xarray-4629",
+  "benchmark": "swebench",
+  "model": "qwen/qwen3.8-27b",
+  "provider": "groq",
+  "models_used": [
+    "qwen/qwen3.8-27b"
+  ],
+  "success": true,
+  "iterations": 4,
+  "total_input_tokens": 15152,
+  "total_output_tokens": 194,
+  "input_tokens_per_step": [
+    2504,
+    3619,
+    3947,
+    5082
+  ],
+  "output_tokens_per_step": [
+    39,
+    48,
+    77,
+    30
+  ],
+  "total_time_seconds": 18.232728004455566,
+  "request_time_ms_per_step": [
+    498.8892080000369,
+    647.1099579975998,
+    796.0437080000702,
+    651.4401250024093
+  ],
+  "total_requests": 6,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 3,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    },
+    {
+      "step": 4,
+      "model": "qwen/qwen3.8-27b",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [
+    "xarray/core/merge.py"
+  ],
+  "first_patch_file_step": 2,
+  "test_failures": [
+    {
+      "step": 1,
+      "failures": 1
+    },
+    {
+      "step": 3,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": 3,
+  "tests_pass_step": 3,
+  "steps_after_tests_pass": 1
+}

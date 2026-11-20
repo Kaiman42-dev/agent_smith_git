@@ -1,0 +1,120 @@
+{
+  "task_id": "django__django-11066",
+  "benchmark": "swebench",
+  "model": "openai/gpt-oss-120b",
+  "provider": "groq",
+  "models_used": [
+    "openai/gpt-oss-120b"
+  ],
+  "success": false,
+  "iterations": 13,
+  "total_input_tokens": 51244,
+  "total_output_tokens": 857,
+  "input_tokens_per_step": [
+    2421,
+    3431,
+    2547,
+    3423,
+    3478,
+    3534,
+    3589,
+    3644,
+    3699,
+    5273,
+    3873,
+    7109,
+    5223
+  ],
+  "output_tokens_per_step": [
+    38,
+    22,
+    39,
+    48,
+    266,
+    51,
+    53,
+    51,
+    73,
+    52,
+    50,
+    81,
+    33
+  ],
+  "total_time_seconds": 41.000284910202026,
+  "request_time_ms_per_step": [
+    742.7521669997077,
+    290.7209999993938,
+    698.6904580007831,
+    485.8734999997978,
+    1536.2401669990504,
+    695.149749999473,
+    774.5837500006019,
+    535.3920829984418,
+    533.4567919999245,
+    617.5014580003335,
+    611.5910419994179,
+    807.7866249986982,
+    439.24499999957334
+  ],
+  "total_requests": 20,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 2,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 3,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 7,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 9,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 10,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 11,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    },
+    {
+      "step": 12,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 13,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [],
+  "first_patch_file_step": null,
+  "test_failures": [],
+  "first_failure_drop_step": null,
+  "tests_pass_step": null,
+  "steps_after_tests_pass": null
+}

@@ -45,6 +45,12 @@ CUT_NOTE = ("\n(Note: your reply was cut at 'Observation:'. Observations come "
 FORMAT_REMINDER = ("Your reply contained no ```python block and no final answer. "
                    "Reply with ONE ```python block, or give your final answer.")
 
+# Sent when final_answer() gets an empty answer (e.g. get_patch() == "" because no file was
+# edited): the agent does not stop on it, the LLM must know why it was refused
+EMPTY_ANSWER_NOTE = ("final_answer() received an empty answer, so it was refused and the task "
+                     "goes on. If you submitted get_patch(): the patch is empty because no file "
+                     "was changed. Make the fix first, check it, then call final_answer() again.")
+
 # Added to every observation when the caller asks for it (alerte_budget): without it the
 # LLM does not know how many steps it has left, and keeps exploring until the limit
 BUDGET_NOTE = "\n[Budget: step {tour}/{max_tours}, about {restants} step(s) left]"
@@ -362,6 +368,14 @@ class ClientLLM:
             try:
                 with urllib.request.urlopen(requete, timeout=min(40, reste or 40)) as response: #envoie la requete au serveur
                     reponse = json.load(response)
+                # un 200 sans "choices" arrive sur le free tier (quota, modèle surchargé) : sans ce
+                # test, reponse["choices"] levait KeyError et arrêtait tout le run (xing4.0, bench_v5)
+                if not isinstance(reponse, dict) or not reponse.get("choices"):
+                    logging.error(f"Réponse sans 'choices' : {str(reponse)[:200]}")
+                    self.erreurs.append("no choices")
+                    i = i + 1
+                    self.attendre(i, fin=fin)  # même traitement qu'un timeout : on réessaie
+                    continue
                 self.temps_ms = (time.perf_counter() - debut) * 1000
                 # nombre de tokens renvoye par l'API
                 self.input_tokens, self.output_tokens = compter_tokens(reponse.get("usage") or {})
@@ -452,7 +466,7 @@ class Agent:
                  secours: list | None = None, max_input_tokens: int | None = None,
                  max_output_tokens: int | None = None, fin: float | None = None,
                  alerte_budget: int | None = None, observations_completes: int | None = None,
-                 max_tokens_par_tour: int | None = None):
+                 max_tokens_par_tour: int | None = None, valider_reponse=None):
         """sandbox: created by the caller, who chooses its MCP tools.
         tools_manual: tool documentation appended to the system prompt.
         secours: clients LLM de secours, essayés dans l'ordre si le client actuel ne répond plus.
@@ -479,6 +493,9 @@ class Agent:
         self.alerte_budget = alerte_budget
         self.observations_completes = observations_completes
         self.max_tokens_par_tour = max_tokens_par_tour
+        # valider_reponse(reponse) -> None si la réponse finale est acceptée, sinon le message à
+        # envoyer au LLM (SWE-bench : refuse tant que le dépôt n'a aucune modification)
+        self.valider_reponse = valider_reponse
         self.taille_dernier_envoi = 0  # caractères envoyés au dernier appel
         # pour les metriques du benchmark (agent_algo/metriques.py) : ce que solution.json ne garde pas
         self.tour = 0
@@ -568,6 +585,14 @@ class Agent:
             logging.warning(f"{ancien.modele} indisponible (code {code_erreur}), bascule sur {self.client.modele}")
 
 
+    def refus_reponse(self, reponse) -> str | None:
+        """None si la réponse finale est acceptée, sinon le message qui explique le refus au LLM."""
+        if not str(reponse).strip():
+            return EMPTY_ANSWER_NOTE
+        if self.valider_reponse is not None:
+            return self.valider_reponse(str(reponse))
+        return None
+
     def agent_algo(self) -> tuple[str, list[StepMetrics]]:
         """fait tourner la boucle think->act->observe jusqu'a la reponse"""
         memoire=[
@@ -637,10 +662,21 @@ class Agent:
                 return f"Arret de l'agent : {arret}.", steps
 
             if result is not None and result.final_answer is not None:
+                # réponse refusée (vide, ou dépôt sans modification pour SWE-bench) : on ne
+                # s'arrête pas dessus, on le dit au LLM ; max_tours borne toujours la boucle
+                refus = self.refus_reponse(result.final_answer)
+                if refus is not None:
+                    # l'observation de ce tour (avec le budget) est déjà dans memoire
+                    memoire.append({"role": "user", "content": refus})
+                    continue
                 self.succes = True  # the code called final_answer()
                 return result.final_answer, steps
 
             if finale is not None:
+                refus = self.refus_reponse(finale)
+                if refus is not None:
+                    memoire.append({"role": "user", "content": refus + budget})  # pas d'observation ce tour
+                    continue
                 self.succes = True
                 return finale, steps
 

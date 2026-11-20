@@ -6,9 +6,13 @@ __pycache__/
 # sorties de nos essais locaux (on ne les commite pas)
 cache/bench/
 cache/debug_solution.json
+evaluations/
+exams/
 
 # réglages personnels de l'éditeur
 .vscode/
 
 # réglages locaux et worktrees de Claude Code
 .claude/
+moulinette/
+swebench_exam*.log

@@ -51,9 +51,6 @@ def list_files(directory: str, pattern: str) -> str:
     """
     return file_systeme_tool.list_files(directory, pattern)
 
-
-# ---- Code search tools ----
-
 @mcp.tool()
 def search_code(pattern: str, file_pattern: str) -> str:
     """Search the repository for lines containing a text (like grep).

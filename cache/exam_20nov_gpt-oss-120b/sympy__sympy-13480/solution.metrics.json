@@ -1,0 +1,66 @@
+{
+  "task_id": "sympy__sympy-13480",
+  "benchmark": "swebench",
+  "model": "openai/gpt-oss-120b",
+  "provider": "groq",
+  "models_used": [
+    "openai/gpt-oss-120b"
+  ],
+  "success": true,
+  "iterations": 6,
+  "total_input_tokens": 13163,
+  "total_output_tokens": 529,
+  "input_tokens_per_step": [
+    1724,
+    2380,
+    1938,
+    2020,
+    2121,
+    2980
+  ],
+  "output_tokens_per_step": [
+    250,
+    64,
+    65,
+    77,
+    39,
+    34
+  ],
+  "total_time_seconds": 14.969122171401978,
+  "request_time_ms_per_step": [
+    969.9247909993574,
+    1398.3240830002615,
+    329.3014589999075,
+    472.21983300005377,
+    253.27287499931117,
+    574.2876669992256
+  ],
+  "total_requests": 7,
+  "total_retries": 0,
+  "provider_errors": [
+    {
+      "step": 2,
+      "model": "openai/gpt-oss-120b",
+      "error": "400"
+    },
+    {
+      "step": 3,
+      "model": "openai/gpt-oss-120b",
+      "error": "429"
+    }
+  ],
+  "fallbacks": [],
+  "patch_files": [
+    "sympy/functions/elementary/hyperbolic.py"
+  ],
+  "first_patch_file_step": 3,
+  "test_failures": [
+    {
+      "step": 5,
+      "failures": 0
+    }
+  ],
+  "first_failure_drop_step": null,
+  "tests_pass_step": 5,
+  "steps_after_tests_pass": 1
+}
