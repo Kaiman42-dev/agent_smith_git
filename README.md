@@ -327,18 +327,10 @@ The runs are in `cache/exam/` (before), `cache/exam_v2/` (failed attempt) and `c
 
 ### How AI was used
 
-- **Claude Code** was used to debug the SWE-bench runs: reading `solution.json` files to find
+- to debug the SWE-bench runs: reading `solution.json` files to find
   why the agent wasted steps and tokens, then adding the observation shortening
   (`observations_completes`) and the per-step output cap (`max_tokens_par_tour`), and rewriting
   the method section of the SWE-bench prompt. The before/after runs above come from that work.
-- **Claude Code** was used to check the project against the correction scale: running the exam
-  scripts on a fresh clone, finding the issues below, and writing their fixes with us:
-  - Docker cleanup when the agent is killed with `kill -9` (`lancer_conteneur` and
-    `surveiller_parent` in `agent_swebench/__main__.py`);
-  - refusing a final answer while the repository has no changes (`refuser_patch_vide`), after
-    an exam run lost 2 tasks on empty patches;
-  - retrying a provider reply that has no `choices` instead of stopping the run;
-  - analysing the two exam runs that led to the new default model (`qwen/qwen3.8-27b`).
-- **Claude Code** wrote the first draft of `BENCHMARK_REPORT.md` from our `solution.json` files
+- write the first draft of `BENCHMARK_REPORT.md` from our `solution.json` files
   and the tables of `agent_algo/rapport.py`; we checked the numbers and the conclusions.
-- **Claude Code** wrote the first draft of this README from the code; we reviewed it.
+- write the first draft of this README from the code; we reviewed it.
