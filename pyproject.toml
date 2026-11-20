@@ -1,7 +1,7 @@
 [project]
 name = "agent-smith-git"
 version = "0.1.0"
-description = "Add your description here"
+description = "Code agent that solves MBPP and SWE-bench tasks by writing Python run in a sandbox"
 readme = "README.md"
 requires-python = ">=3.10, <3.11"
 dependencies = [

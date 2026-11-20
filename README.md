@@ -65,16 +65,22 @@ may also hold several keys separated by commas.
 
 The moulinette dumps a task, our agent solves it, the moulinette validates the solution:
 
+The moulinette is not part of this repository: it comes with the subject. From the root of the
+repository, with `M` set to its folder:
+
 ```bash
+M=../moulinette         # the moulinette given with the subject
+C=$PWD/cache            # where the task and solution files go
+
 # MBPP
-cd moulinette && uv run moulinette_eval dump mbpp --output ../cache/mbpp_task.json && cd ..
-uv run python -m agent_mbpp --task-file cache/mbpp_task.json --output cache/mbpp_solution.json
-cd moulinette && uv run moulinette_eval validate mbpp ../cache/mbpp_task.json ../cache/mbpp_solution.json
+(cd $M && uv run moulinette_eval dump mbpp --output $C/mbpp_task.json)
+uv run python -m agent_mbpp --task-file $C/mbpp_task.json --output $C/mbpp_solution.json
+(cd $M && uv run moulinette_eval validate mbpp $C/mbpp_task.json $C/mbpp_solution.json)
 
 # SWE-bench (Docker must be running)
-cd moulinette && uv run moulinette_eval dump swebench --output ../cache/swebench_task.json && cd ..
-uv run python -m agent_swebench --task-file cache/swebench_task.json --output cache/swebench_solution.json
-cd moulinette && uv run moulinette_eval validate swebench ../cache/swebench_task.json ../cache/swebench_solution.json
+(cd $M && uv run moulinette_eval dump swebench --output $C/swebench_task.json)
+uv run python -m agent_swebench --task-file $C/swebench_task.json --output $C/swebench_solution.json
+(cd $M && uv run moulinette_eval validate swebench $C/swebench_task.json $C/swebench_solution.json)
 ```
 
 Both agents accept the same options:
@@ -86,9 +92,9 @@ Both agents accept the same options:
 | `--api-key-env` | guessed from the URL | Environment variable that holds the key |
 | `--no-fallback` | off | Never switch provider (used for benchmarks: one model per run) |
 
-`moulinette/quickstart.sh mbpp|swebench --student-path ..` runs the three steps in one command.
-Before a SWE-bench session, `cd moulinette && uv run moulinette_eval warmup` downloads the
-Docker images in advance, so the download does not eat into the agent's 900 seconds.
+`$M/quickstart.sh mbpp|swebench --student-path $PWD` runs the three steps in one command.
+Before a SWE-bench session, `(cd $M && uv run moulinette_eval warmup)` downloads the Docker
+images in advance, so the download does not eat into the agent's 900 seconds.
 
 ### Interactive sandbox
 
@@ -103,13 +109,23 @@ uv run sandbox --mcp-server http://127.0.0.1:8000/mcp                      # MCP
 An MCP server can be started over HTTP with `python mcp_tools_swebench.py --http --port 8000`.
 In the REPL, type Python; `exit` or Ctrl+D quits.
 
-### Tests
+### Checking the project with the exam scripts
+
+The exam scripts also come with the subject (`exams/`). They expect this layout: this repository
+in `student/`, next to `moulinette/`, `exams/` and the `.env` file.
 
 ```bash
-uv run python -m pytest agent_algo agent_mbpp outils sandbox
+./exams/exam_sandbox.sh   --student-path ./student --moulinette-path ./moulinette --env-file .env
+./exams/exam_anticheat.sh --student-path ./student
+./exams/exam_mbpp.sh      --student-path ./student --moulinette-path ./moulinette --env-file .env
+./exams/exam_swebench.sh  --student-path ./student --moulinette-path ./moulinette --env-file .env
 ```
 
-The tests use fake LLM clients and fake sandboxes: no network and no API key needed.
+On macOS, the scripts need GNU `mktemp` (`mktemp --suffix`): install `coreutils` with Homebrew and
+put `$(brew --prefix coreutils)/libexec/gnubin` first in `PATH`. Results on 20 November 2026:
+sandbox 14/14 (and the layer 1 bonus), anti-cheat 6/6, MBPP 5/5, SWE-bench 3/3.
+
+The repository has no unit tests (they were removed with the dead code in commit `c9e438d`).
 
 ## System architecture
 
@@ -313,9 +329,16 @@ The runs are in `cache/exam/` (before), `cache/exam_v2/` (failed attempt) and `c
 
 - **Claude Code** was used to debug the SWE-bench runs: reading `solution.json` files to find
   why the agent wasted steps and tokens, then adding the observation shortening
-  (`observations_completes`) and the per-step output cap (`max_tokens_par_tour`) with their
-  tests (`agent_algo/test_memoire.py`, `agent_algo/test_limites.py`), and rewriting the method
-  section of the SWE-bench prompt. The before/after runs above come from that work.
+  (`observations_completes`) and the per-step output cap (`max_tokens_par_tour`), and rewriting
+  the method section of the SWE-bench prompt. The before/after runs above come from that work.
+- **Claude Code** was used to check the project against the correction scale: running the exam
+  scripts on a fresh clone, finding the issues below, and writing their fixes with us:
+  - Docker cleanup when the agent is killed with `kill -9` (`lancer_conteneur` and
+    `surveiller_parent` in `agent_swebench/__main__.py`);
+  - refusing a final answer while the repository has no changes (`refuser_patch_vide`), after
+    an exam run lost 2 tasks on empty patches;
+  - retrying a provider reply that has no `choices` instead of stopping the run;
+  - analysing the two exam runs that led to the new default model (`qwen/qwen3.8-27b`).
+- **Claude Code** wrote the first draft of `BENCHMARK_REPORT.md` from our `solution.json` files
+  and the tables of `agent_algo/rapport.py`; we checked the numbers and the conclusions.
 - **Claude Code** wrote the first draft of this README from the code; we reviewed it.
-- *TODO: list the other parts of the project where AI was used (code, tests, debugging,
-  documentation), and with which tool.*

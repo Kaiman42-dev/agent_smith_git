@@ -8,11 +8,7 @@ import urllib.parse
 from dotenv import load_dotenv # type: ignore
 import os
 import sys
-import io
-import inspect
 import logging
-import traceback
-import contextlib
 from pathlib import Path
 
 # permet d'importer Extraction_llm et outils/ qui sont a la racine du projet

@@ -6,6 +6,8 @@ __pycache__/
 # sorties de nos essais locaux (on ne les commite pas)
 cache/bench/
 cache/debug_solution.json
+cache/mbpp_*.json
+cache/swebench_*.json
 evaluations/
 exams/
 
